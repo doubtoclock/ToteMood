@@ -1,7 +1,6 @@
 import Image from "next/image";
 import Link from "next/link";
 import { ShoppingCart, Star } from "lucide-react";
-import { products } from "@/lib/data/products";
 import { ShopHero } from "@/components/shop/ShopHero";
 import { ShopValueProps } from "@/components/shop/ShopValueProps";
 import { ShopCategories } from "@/components/shop/ShopCategories";
@@ -9,8 +8,19 @@ import { ShopPromo } from "@/components/shop/ShopPromo";
 import { ShopTrending } from "@/components/shop/ShopTrending";
 import { ShopNewsletter } from "@/components/shop/ShopNewsletter";
 
-export default function ShopPage() {
+export default async function ShopPage() {
+  let products = [];
+  try {
+    const res = await fetch('http://localhost:4000/api/products', { cache: 'no-store' });
+    if (res.ok) {
+      products = await res.json();
+    }
+  } catch (error) {
+    console.error("Failed to fetch products:", error);
+  }
+
   return (
+
     <main className="min-h-screen bg-[#F8F6EF]">
       {/* 1. Hero Section */}
       <ShopHero />

@@ -33,16 +33,49 @@ export default function CheckoutPage() {
     }
   };
 
-  const handleCheckout = (e: React.FormEvent) => {
+  const handleCheckout = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setIsProcessing(true);
     
-    // Mock processing time
-    setTimeout(() => {
+    const formData = new FormData(e.currentTarget);
+    const orderData = {
+      customerEmail: formData.get('email'),
+      customerPhone: formData.get('phone'),
+      customerFirstName: formData.get('firstName'),
+      customerLastName: formData.get('lastName'),
+      customerAddress: formData.get('address'),
+      customerCity: formData.get('city'),
+      customerState: formData.get('state'),
+      customerZip: formData.get('zip'),
+      subtotal,
+      shipping,
+      total,
+      items: items.map(item => ({
+        productId: item.product.id,
+        quantity: item.quantity,
+        price: item.product.price,
+        customImageUrl: item.customImages?.[0] || null // For simplicity, taking the first uploaded image
+      }))
+    };
+
+    try {
+      const res = await fetch('http://localhost:4000/api/orders', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(orderData)
+      });
+      
+      if (res.ok) {
+        setIsSuccess(true);
+        clearCart();
+      } else {
+        console.error("Order failed to process");
+      }
+    } catch (error) {
+      console.error("Error creating order:", error);
+    } finally {
       setIsProcessing(false);
-      setIsSuccess(true);
-      clearCart();
-    }, 2000);
+    }
   };
 
   if (isSuccess) {
@@ -101,7 +134,8 @@ export default function CheckoutPage() {
                   Contact Information
                 </h2>
                 <div className="grid grid-cols-1 gap-4">
-                  <input type="email" placeholder="Email Address" required className="w-full bg-white border border-[#1C1C1A]/20 rounded-xl px-4 py-4 text-[#1C1C1A] focus:outline-none focus:border-[#757D5C] focus:ring-1 focus:ring-[#757D5C] transition-all" />
+                  <input name="email" type="email" placeholder="Email Address" required className="w-full bg-white border border-[#1C1C1A]/20 rounded-xl px-4 py-4 text-[#1C1C1A] focus:outline-none focus:border-[#757D5C] focus:ring-1 focus:ring-[#757D5C] transition-all" />
+                  <input name="phone" type="tel" placeholder="Phone Number" required className="w-full bg-white border border-[#1C1C1A]/20 rounded-xl px-4 py-4 text-[#1C1C1A] focus:outline-none focus:border-[#757D5C] focus:ring-1 focus:ring-[#757D5C] transition-all" />
                   <div className="flex items-center gap-2 mt-2">
                     <input type="checkbox" id="newsletter" className="accent-[#757D5C]" defaultChecked />
                     <label htmlFor="newsletter" className="text-sm text-[#5A5A55]">Email me with news and offers</label>
@@ -116,13 +150,13 @@ export default function CheckoutPage() {
                   Shipping Address
                 </h2>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <input type="text" placeholder="First Name" required className="w-full bg-white border border-[#1C1C1A]/20 rounded-xl px-4 py-4 text-[#1C1C1A] focus:outline-none focus:border-[#757D5C]" />
-                  <input type="text" placeholder="Last Name" required className="w-full bg-white border border-[#1C1C1A]/20 rounded-xl px-4 py-4 text-[#1C1C1A] focus:outline-none focus:border-[#757D5C]" />
-                  <input type="text" placeholder="Address" required className="w-full sm:col-span-2 bg-white border border-[#1C1C1A]/20 rounded-xl px-4 py-4 text-[#1C1C1A] focus:outline-none focus:border-[#757D5C]" />
-                  <input type="text" placeholder="City" required className="w-full bg-white border border-[#1C1C1A]/20 rounded-xl px-4 py-4 text-[#1C1C1A] focus:outline-none focus:border-[#757D5C]" />
+                  <input name="firstName" type="text" placeholder="First Name" required className="w-full bg-white border border-[#1C1C1A]/20 rounded-xl px-4 py-4 text-[#1C1C1A] focus:outline-none focus:border-[#757D5C]" />
+                  <input name="lastName" type="text" placeholder="Last Name" required className="w-full bg-white border border-[#1C1C1A]/20 rounded-xl px-4 py-4 text-[#1C1C1A] focus:outline-none focus:border-[#757D5C]" />
+                  <input name="address" type="text" placeholder="Address" required className="w-full sm:col-span-2 bg-white border border-[#1C1C1A]/20 rounded-xl px-4 py-4 text-[#1C1C1A] focus:outline-none focus:border-[#757D5C]" />
+                  <input name="city" type="text" placeholder="City" required className="w-full bg-white border border-[#1C1C1A]/20 rounded-xl px-4 py-4 text-[#1C1C1A] focus:outline-none focus:border-[#757D5C]" />
                   <div className="flex gap-4">
-                    <input type="text" placeholder="State" required className="w-1/2 bg-white border border-[#1C1C1A]/20 rounded-xl px-4 py-4 text-[#1C1C1A] focus:outline-none focus:border-[#757D5C]" />
-                    <input type="text" placeholder="ZIP" required className="w-1/2 bg-white border border-[#1C1C1A]/20 rounded-xl px-4 py-4 text-[#1C1C1A] focus:outline-none focus:border-[#757D5C]" />
+                    <input name="state" type="text" placeholder="State" required className="w-1/2 bg-white border border-[#1C1C1A]/20 rounded-xl px-4 py-4 text-[#1C1C1A] focus:outline-none focus:border-[#757D5C]" />
+                    <input name="zip" type="text" placeholder="ZIP" required className="w-1/2 bg-white border border-[#1C1C1A]/20 rounded-xl px-4 py-4 text-[#1C1C1A] focus:outline-none focus:border-[#757D5C]" />
                   </div>
                 </div>
               </section>
