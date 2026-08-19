@@ -1,15 +1,19 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Eye, Download, User, Phone, MapPin, PackageOpen } from "lucide-react";
+import { Eye, Download, User, Phone, MapPin, PackageOpen, Trash2, Loader2 } from "lucide-react";
 import Image from "next/image";
+import { io } from "socket.io-client";
 
 export default function AdminOrders() {
   const [orders, setOrders] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedOrder, setSelectedOrder] = useState<any | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [updatingId, setUpdatingId] = useState<string | null>(null);
 
   useEffect(() => {
+    // Fetch initial orders
     fetch('http://localhost:4000/api/orders')
       .then(res => res.json())
       .then(data => {
@@ -20,17 +24,69 @@ export default function AdminOrders() {
         console.error(err);
         setLoading(false);
       });
+
+    // Setup Socket.IO connection
+    const socket = io('http://localhost:4000');
+
+    socket.on("new_order", (order) => {
+      setOrders(prev => [order, ...prev]);
+    });
+
+    socket.on("order_updated", (updatedOrder) => {
+      setOrders(prev => prev.map(o => o.id === updatedOrder.id ? updatedOrder : o));
+      setSelectedOrder(prev => (prev?.id === updatedOrder.id ? updatedOrder : prev));
+    });
+
+    socket.on("order_deleted", (deletedId) => {
+      setOrders(prev => prev.filter(o => o.id !== deletedId));
+      setSelectedOrder(prev => (prev?.id === deletedId ? null : prev));
+    });
+
+    return () => {
+      socket.disconnect();
+    };
   }, []);
 
+  const handleDelete = async (id: string) => {
+    if (!confirm("Are you sure you want to delete this order?")) return;
+    setDeletingId(id);
+    try {
+      await fetch(`http://localhost:4000/api/orders/${id}`, {
+        method: 'DELETE'
+      });
+      // UI updates automatically via WebSocket
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setDeletingId(null);
+    }
+  };
+
+  const handleUpdateStatus = async (id: string, newStatus: string) => {
+    setUpdatingId(id);
+    try {
+      await fetch(`http://localhost:4000/api/orders/${id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: newStatus })
+      });
+      // UI updates automatically via WebSocket
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setUpdatingId(null);
+    }
+  };
+
   if (loading) {
-    return <div className="p-8 text-[#5A5A55]">Loading orders...</div>;
+    return <div className="p-8 text-[#5A5A55] flex items-center gap-2"><Loader2 className="w-4 h-4 animate-spin" /> Loading orders...</div>;
   }
 
   return (
     <div className="space-y-8 relative">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-serif text-[#1C1C1A]">Orders (KOT)</h1>
+          <h1 className="text-3xl font-serif text-[#1C1C1A]">Orders</h1>
           <p className="text-[#5A5A55] mt-2">Manage incoming orders, customer details, and custom image uploads.</p>
         </div>
       </div>
@@ -49,7 +105,7 @@ export default function AdminOrders() {
           </thead>
           <tbody>
             {orders.map((order) => (
-              <tr key={order.id} className="border-b border-[#1C1C1A]/5 hover:bg-[#F8F6EF]/20 transition-colors">
+              <tr key={order.id} className={`border-b border-[#1C1C1A]/5 hover:bg-[#F8F6EF]/20 transition-colors ${deletingId === order.id ? 'opacity-50' : ''}`}>
                 <td className="p-4 text-sm font-medium text-[#1C1C1A]">
                   #{order.id.slice(-6).toUpperCase()}
                 </td>
@@ -58,12 +114,13 @@ export default function AdminOrders() {
                   <div className="text-xs text-[#5A5A55]">{order.customerEmail}</div>
                 </td>
                 <td className="p-4">
-                  <span className={`px-2 py-1 rounded text-xs font-bold ${
+                  <span className={`px-2 py-1 rounded text-xs font-bold inline-flex items-center gap-1 ${
                     order.status === 'PENDING' ? 'bg-yellow-100 text-yellow-800' :
                     order.status === 'PROCESSING' ? 'bg-blue-100 text-blue-800' :
                     order.status === 'COMPLETED' ? 'bg-green-100 text-green-800' :
                     'bg-gray-100 text-gray-800'
                   }`}>
+                    {updatingId === order.id && <Loader2 className="w-3 h-3 animate-spin" />}
                     {order.status}
                   </span>
                 </td>
@@ -73,12 +130,20 @@ export default function AdminOrders() {
                 <td className="p-4 text-sm font-bold text-[#1C1C1A]">
                   ₹{order.total.toFixed(2)}
                 </td>
-                <td className="p-4 text-right">
+                <td className="p-4 text-right space-x-2">
                   <button 
                     onClick={() => setSelectedOrder(order)}
-                    className="p-2 text-[#757D5C] hover:text-[#1C1C1A] hover:bg-[#F8F6EF] rounded-lg transition-colors inline-flex items-center gap-2 text-xs font-bold uppercase tracking-wider"
+                    disabled={deletingId === order.id}
+                    className="p-2 text-[#757D5C] hover:text-[#1C1C1A] hover:bg-[#F8F6EF] rounded-lg transition-colors inline-flex items-center gap-2 text-xs font-bold uppercase tracking-wider disabled:opacity-50"
                   >
                     <Eye className="w-4 h-4" /> View
+                  </button>
+                  <button 
+                    onClick={() => handleDelete(order.id)}
+                    disabled={deletingId === order.id}
+                    className="p-2 text-red-500 hover:text-red-700 hover:bg-red-50 rounded-lg transition-colors inline-flex items-center gap-2 text-xs font-bold uppercase tracking-wider disabled:opacity-50"
+                  >
+                    {deletingId === order.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
                   </button>
                 </td>
               </tr>
@@ -140,10 +205,10 @@ export default function AdminOrders() {
                     {selectedOrder.items.map((item: any) => (
                       <div key={item.id} className="flex gap-4 p-4 border border-[#1C1C1A]/10 rounded-xl">
                         <div className="w-16 h-16 relative rounded-lg bg-[#EAECE3] overflow-hidden shrink-0">
-                          <Image src={item.product.image} alt={item.product.name} fill className="object-cover" />
+                          <Image src={item.product?.image || ''} alt={item.product?.name || 'Product'} fill className="object-cover" />
                         </div>
                         <div className="flex-1">
-                          <div className="font-bold text-[#1C1C1A]">{item.product.name}</div>
+                          <div className="font-bold text-[#1C1C1A]">{item.product?.name || 'Unknown Product'}</div>
                           <div className="text-sm text-[#5A5A55]">Qty: {item.quantity} × ₹{item.priceAtPurchase.toFixed(2)}</div>
                         </div>
                         <div className="font-bold text-[#1C1C1A]">
@@ -171,8 +236,13 @@ export default function AdminOrders() {
               </div>
             </div>
 
-            {/* Right side: Custom Images / KOT status */}
-            <div className="w-full md:w-80 bg-[#F8F6EF] p-8 flex flex-col">
+            {/* Right side: Custom Images & Status */}
+            <div className="w-full md:w-80 bg-[#F8F6EF] p-8 flex flex-col relative">
+              {updatingId === selectedOrder.id && (
+                <div className="absolute inset-0 bg-white/50 backdrop-blur-sm flex items-center justify-center z-10 rounded-r-2xl">
+                  <Loader2 className="w-8 h-8 text-[#757D5C] animate-spin" />
+                </div>
+              )}
               <h3 className="text-xs font-bold uppercase tracking-widest text-[#5A5A55] mb-6 flex items-center gap-2">
                 <PackageOpen className="w-4 h-4" /> Custom Uploads
               </h3>
@@ -180,8 +250,8 @@ export default function AdminOrders() {
               <div className="flex-1 space-y-6">
                 {selectedOrder.items.filter((i: any) => i.customImageUrl).map((item: any, idx: number) => (
                   <div key={idx} className="bg-white p-3 rounded-xl border border-[#1C1C1A]/10 shadow-sm">
-                    <div className="text-xs font-medium text-[#1C1C1A] mb-2 truncate" title={item.product.name}>
-                      For: {item.product.name}
+                    <div className="text-xs font-medium text-[#1C1C1A] mb-2 truncate" title={item.product?.name}>
+                      For: {item.product?.name}
                     </div>
                     <div className="w-full aspect-square relative rounded-lg overflow-hidden bg-[#EAECE3] border border-[#1C1C1A]/5 mb-3">
                       <Image src={item.customImageUrl} alt="Custom upload" fill className="object-cover" />
@@ -209,7 +279,9 @@ export default function AdminOrders() {
                 <label className="text-xs font-bold uppercase tracking-widest text-[#5A5A55] block mb-2">Update Status</label>
                 <select 
                   className="w-full bg-white border border-[#1C1C1A]/20 rounded-xl px-4 py-3 text-[#1C1C1A] text-sm focus:outline-none focus:border-[#757D5C]"
-                  defaultValue={selectedOrder.status}
+                  value={selectedOrder.status}
+                  onChange={(e) => handleUpdateStatus(selectedOrder.id, e.target.value)}
+                  disabled={updatingId === selectedOrder.id}
                 >
                   <option value="PENDING">Pending</option>
                   <option value="PROCESSING">Processing</option>

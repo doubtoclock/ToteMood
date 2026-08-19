@@ -6,6 +6,7 @@ import { ProductFeatures } from "@/components/product/ProductFeatures";
 import { ProductReviews } from "@/components/product/ProductReviews";
 import { ProductFAQ } from "@/components/product/ProductFAQ";
 import { ProductRelated } from "@/components/product/ProductRelated";
+import { ScrollToTop } from "@/components/layout/ScrollToTop";
 
 interface PageProps {
   params: Promise<{
@@ -23,6 +24,7 @@ export default async function ProductPage({ params }: PageProps) {
 
   return (
     <main className="min-h-screen bg-[#F8F6EF] pt-20 md:pt-24 relative overflow-hidden">
+      <ScrollToTop />
       {/* Background Ambience for top section */}
       <AmbientGlow
         color="bg-[#C4C9B3]"

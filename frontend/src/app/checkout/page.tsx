@@ -4,7 +4,7 @@ import { useCartStore } from "@/lib/store/useCartStore";
 import { AmbientGlow } from "@/components/ui/AmbientGlow";
 import Image from "next/image";
 import Link from "next/link";
-import { Upload, CheckCircle2, ChevronRight, ArrowLeft } from "lucide-react";
+import { Upload, CheckCircle2, ChevronRight, ArrowLeft, Loader2 } from "lucide-react";
 import { useState, useRef } from "react";
 import { useRouter } from "next/navigation";
 
@@ -183,9 +183,14 @@ export default function CheckoutPage() {
               <button 
                 type="submit" 
                 disabled={isProcessing}
-                className="w-full bg-[#757D5C] text-white py-5 rounded-full font-bold uppercase tracking-[0.1em] text-lg hover:bg-[#5C6348] transition-colors shadow-lg disabled:opacity-70 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                className="w-full bg-[#757D5C] text-white py-5 rounded-full font-bold uppercase tracking-[0.1em] text-lg hover:bg-[#5C6348] transition-colors shadow-lg disabled:opacity-70 disabled:cursor-not-allowed flex items-center justify-center gap-3 relative overflow-hidden"
               >
-                {isProcessing ? "Processing..." : `Pay ₹${total.toFixed(2)}`}
+                {isProcessing && (
+                  <div className="absolute inset-0 bg-[#5C6348] flex items-center justify-center">
+                    <Loader2 className="w-6 h-6 animate-spin" />
+                  </div>
+                )}
+                Pay ₹{total.toFixed(2)}
               </button>
             </form>
           </div>

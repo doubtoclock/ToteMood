@@ -64,6 +64,22 @@ export default function AdminProducts() {
     setIsModalOpen(true);
   };
 
+  const handleDelete = async (id: string) => {
+    if (!confirm("Are you sure you want to delete this product?")) return;
+    try {
+      const res = await fetch(`http://localhost:4000/api/products/${id}`, {
+        method: 'DELETE'
+      });
+      if (res.ok) {
+        fetchProducts();
+      } else {
+        alert("Cannot delete product: it may be tied to existing orders.");
+      }
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsSubmitting(true);
@@ -80,11 +96,12 @@ export default function AdminProducts() {
     };
 
     try {
-      // If editingProduct exists, we would PUT, else POST. 
-      // For now, our backend only has POST /api/products implemented for creation.
-      // We will assume creation for this step, or implement PUT if needed.
-      const res = await fetch('http://localhost:4000/api/products', {
-        method: 'POST',
+      const url = editingProduct 
+        ? `http://localhost:4000/api/products/${editingProduct.id}`
+        : 'http://localhost:4000/api/products';
+      
+      const res = await fetch(url, {
+        method: editingProduct ? 'PUT' : 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
       });
@@ -173,7 +190,10 @@ export default function AdminProducts() {
                     >
                       <Edit2 className="w-4 h-4" />
                     </button>
-                    <button className="p-2 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors">
+                    <button 
+                      onClick={() => handleDelete(product.id)}
+                      className="p-2 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                    >
                       <Trash2 className="w-4 h-4" />
                     </button>
                   </div>
