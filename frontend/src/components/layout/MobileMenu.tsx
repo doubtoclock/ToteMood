@@ -61,10 +61,10 @@ export function MobileMenu({ isOpen, onClose }: MobileMenuProps) {
             <nav className="flex-1 flex flex-col justify-center space-y-10">
               {[
                 { name: "Shop", href: "/shop" },
-                { name: "Stories", href: "#stories" },
+                { name: "Stories", href: "/#stories" },
                 { name: "About", href: "/about" }
               ].map((item, i) => {
-                const isAnchor = item.href.startsWith("#");
+                const isAnchor = item.href.includes("#");
                 const className = "inline-block font-heading text-4xl md:text-5xl font-medium tracking-tight text-foreground transition-opacity hover:opacity-70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring";
                 
                 return (
@@ -74,27 +74,20 @@ export function MobileMenu({ isOpen, onClose }: MobileMenuProps) {
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ delay: 0.1 + i * 0.1, duration: 0.4 }}
                   >
-                    {isAnchor ? (
-                      <a
-                        href={item.href}
-                        className={className}
-                        onClick={(e) => {
+                    <Link
+                      href={item.href}
+                      className={className}
+                      onClick={(e) => {
+                        onClose();
+                        if (isAnchor && pathname === "/") {
                           e.preventDefault();
-                          onClose();
-                          document.querySelector(item.href)?.scrollIntoView({ behavior: "smooth" });
-                        }}
-                      >
-                        {item.name}
-                      </a>
-                    ) : (
-                      <Link
-                        href={item.href}
-                        className={className}
-                        onClick={onClose}
-                      >
-                        {item.name}
-                      </Link>
-                    )}
+                          const id = item.href.split("#")[1];
+                          document.getElementById(id)?.scrollIntoView({ behavior: "smooth" });
+                        }
+                      }}
+                    >
+                      {item.name}
+                    </Link>
                   </motion.div>
                 );
               })}

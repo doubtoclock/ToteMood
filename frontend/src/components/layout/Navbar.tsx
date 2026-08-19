@@ -52,32 +52,24 @@ export function Navbar() {
           <nav className="hidden md:flex flex-1 justify-center space-x-10 lg:space-x-12">
             {[
               { name: "Shop", href: "/shop" },
-              { name: "Stories", href: "#stories" },
+              { name: "Stories", href: "/#stories" },
               { name: "About", href: "/about" }
             ].map((item) => {
-              const isAnchor = item.href.startsWith("#");
+              const isAnchor = item.href.includes("#");
               const className = "font-sans text-[10px] lg:text-[11px] uppercase tracking-[0.2em] font-bold text-primary hover:text-primary/70 transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary rounded-sm px-2 py-1";
               
-              if (isAnchor) {
-                return (
-                  <a
-                    key={item.name}
-                    href={item.href}
-                    className={className}
-                    onClick={(e) => {
-                      e.preventDefault();
-                      document.querySelector(item.href)?.scrollIntoView({ behavior: "smooth" });
-                    }}
-                  >
-                    {item.name}
-                  </a>
-                );
-              }
               return (
                 <Link
                   key={item.name}
                   href={item.href}
                   className={className}
+                  onClick={(e) => {
+                    if (isAnchor && pathname === "/") {
+                      e.preventDefault();
+                      const id = item.href.split("#")[1];
+                      document.getElementById(id)?.scrollIntoView({ behavior: "smooth" });
+                    }
+                  }}
                 >
                   {item.name}
                 </Link>

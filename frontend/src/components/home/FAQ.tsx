@@ -8,34 +8,39 @@ import { AmbientGlow } from "@/components/ui/AmbientGlow";
 
 const faqs = [
   {
-    question: "What makes Totemood different?",
+    question: "How long will it take to share the design with the customer?",
     answer:
-      "Our totes are designed with a meticulous balance of form and function. We prioritize sustainable materials and artisanal craftsmanship, ensuring each piece is as enduring as it is beautiful.",
+      "The design will be delivered to your WhatsApp for approval within 6 to 8 hours after ordering.",
   },
   {
-    question: "How do I choose the right tote?",
+    question: "Will I get to see the design before it is printed?",
     answer:
-      "Consider your daily routine. The Everyday Tote is perfect for standard commutes and essentials, while our Panoramic Tote offers extended capacity for weekends or those who simply carry more.",
+      "Absolutely yes. Your design will be shared on WhatsApp for approval. We start printing only after you confirm the final design.",
   },
   {
-    question: "What materials are your bags made from?",
+    question: "Why don't you offer full Cash on Delivery?",
     answer:
-      "We use premium, sustainably sourced heavy-weight organic cotton canvas, paired with vegetable-tanned leather accents and solid brass hardware designed to develop a rich patina over time.",
+      "Our products are custom-made for you, we don't offer full COD. A small advance confirms your order and allows us to create and share the design for approval. The balance is paid on the delivery.",
   },
   {
-    question: "How long does shipping take?",
+    question: "Why do I need to pay ₹50 while placing the order?",
     answer:
-      "Standard domestic shipping typically takes 3–5 business days. Expedited options are available at checkout. International shipping varies by destination but usually arrives within 7–14 days.",
+      "We take a ₹50 advance because this is a custom-made product. It confirms your order and allows us to create and share the design on WhatsApp for approval. The amount is minus in the final payment that you can pay on delivery.",
   },
   {
-    question: "Can I return or exchange my order?",
+    question: "Is there any return policy?",
     answer:
-      "Yes, we accept returns and exchanges on unused items in their original packaging within 30 days of delivery. Custom or monogrammed pieces are final sale.",
+      "Customized products are non-returnable. Returns or replacements are only applicable for damaged, defective, or wrong items (with unboxing video proof).",
   },
   {
-    question: "How do I care for my tote?",
+    question: "What if I want changes in the design?",
     answer:
-      "Spot clean the canvas with a damp cloth and mild soap. Avoid machine washing or submerging. For the leather straps, a gentle leather conditioner applied twice a year will keep them supple.",
+      "No worries at all! You can request minor changes during the WhatsApp approval stage, and we'll update the design before final printing.",
+  },
+  {
+    question: "How long will it take to receive my order?",
+    answer:
+      "Once your design is approved, your order is printed and delivered within 4-6 working days.",
   },
 ];
 
@@ -88,7 +93,7 @@ export function FAQ() {
                 >
                   <button
                     onClick={() => toggleFaq(index)}
-                    className="w-full py-8 flex items-center justify-between text-left group focus:outline-none"
+                    className="w-full py-5 flex items-center justify-between text-left group focus:outline-none"
                     aria-expanded={isOpen}
                   >
                     <span
@@ -114,7 +119,7 @@ export function FAQ() {
                     className={cn(
                       "overflow-hidden transition-all duration-500 ease-in-out",
                       isOpen
-                        ? "max-h-[500px] opacity-100 mb-8"
+                        ? "max-h-[500px] opacity-100 mb-5"
                         : "max-h-0 opacity-0 mb-0",
                     )}
                   >
