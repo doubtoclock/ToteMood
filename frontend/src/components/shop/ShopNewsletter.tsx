@@ -37,16 +37,19 @@ export function ShopNewsletter() {
         </div>
 
         {/* Newsletter Form */}
-        <div className="max-w-3xl mx-auto flex flex-col md:flex-row items-center gap-4 mt-16 bg-[#F8F6EF] p-4 rounded-full border border-[#1C1C1A]/10">
-          <div className="flex items-center gap-3 w-full md:w-auto px-4 text-[#5A5A55]">
+        <div className="max-w-3xl mx-auto flex flex-col md:flex-row items-center gap-2 md:gap-4 mt-16 bg-[#F8F6EF] p-4 rounded-2xl md:rounded-full border border-[#1C1C1A]/10">
+          <div className="hidden md:flex items-center gap-3 px-4 text-[#5A5A55]">
             <Mail className="w-5 h-5 shrink-0" />
           </div>
-          <input 
-            type="email" 
-            placeholder="Enter your email" 
-            className="w-full bg-transparent border-none outline-none text-[#1C1C1A] placeholder:text-[#8C867C] px-2 py-3"
-          />
-          <button className="w-full md:w-auto bg-[#757D5C] text-white px-8 py-3 rounded-full font-medium tracking-wide hover:bg-[#5C6348] transition-colors shrink-0">
+          <div className="flex w-full md:w-auto flex-grow items-center relative">
+            <Mail className="w-5 h-5 text-[#8C867C] absolute left-4 md:hidden" />
+            <input 
+              type="email" 
+              placeholder="Enter your email" 
+              className="w-full bg-transparent border-none outline-none text-[#1C1C1A] placeholder:text-[#8C867C] pl-12 md:pl-2 pr-4 py-3"
+            />
+          </div>
+          <button className="w-full md:w-auto bg-[#757D5C] text-white px-8 py-3.5 md:py-3 rounded-xl md:rounded-full font-medium tracking-wide hover:bg-[#5C6348] transition-colors shrink-0 mt-2 md:mt-0">
             Subscribe
           </button>
         </div>

@@ -1,35 +1,21 @@
 import Image from "next/image";
 import Link from "next/link";
 import { ShoppingCart, Star } from "lucide-react";
-import { ShopHero } from "@/components/shop/ShopHero";
+import { ShopHeader } from "@/components/shop/ShopHeader";
 import { ShopValueProps } from "@/components/shop/ShopValueProps";
-import { ShopCategories } from "@/components/shop/ShopCategories";
 import { ShopPromo } from "@/components/shop/ShopPromo";
 import { ShopTrending } from "@/components/shop/ShopTrending";
 import { ShopNewsletter } from "@/components/shop/ShopNewsletter";
+import { products } from "@/lib/data/products";
 
-export default async function ShopPage() {
-  let products = [];
-  try {
-    const res = await fetch('http://localhost:4000/api/products', { cache: 'no-store' });
-    if (res.ok) {
-      products = await res.json();
-    }
-  } catch (error) {
-    console.error("Failed to fetch products:", error);
-  }
-
+export default function ShopPage() {
   return (
-
     <main className="min-h-screen bg-[#F8F6EF]">
-      {/* 1. Hero Section */}
-      <ShopHero />
-      
+      {/* 1. Minimal Header */}
+      <ShopHeader />
+
       {/* 2. Value Props Strip */}
       <ShopValueProps />
-      
-      {/* 3. Categories */}
-      <ShopCategories />
       
       {/* 4. Promotional Banner */}
       <ShopPromo />
@@ -49,7 +35,7 @@ export default async function ShopPage() {
             </p>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 md:gap-8">
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6 md:gap-8">
             {products.map((product) => (
               <Link 
                 href={`/shop/${product.id}`} 
@@ -57,7 +43,7 @@ export default async function ShopPage() {
                 className="group flex flex-col bg-white rounded-[20px] p-4 transition-shadow hover:shadow-lg border border-[#1C1C1A]/5"
               >
                 {/* Image Container */}
-                <div className="relative aspect-[4/5] w-full overflow-hidden rounded-xl bg-[#EAECE3] mb-5">
+                <div className="relative aspect-[4/5] w-full overflow-hidden rounded-xl bg-[#EAECE3] mb-3 sm:mb-5">
                   <Image
                     src={product.image}
                     alt={product.name}
@@ -78,14 +64,19 @@ export default async function ShopPage() {
 
                 {/* Product Info */}
                 <div className="flex flex-col flex-grow px-2 pb-2">
-                  <h3 className="text-base font-bold text-[#1C1C1A] leading-tight font-sans mb-1 line-clamp-1">
+                  <h3 className="text-sm sm:text-base font-bold text-[#1C1C1A] leading-tight font-sans mb-1 line-clamp-2 sm:line-clamp-1">
                     {product.name}
                   </h3>
                   
-                  <div className="flex items-center gap-2 mb-3">
-                    <span className="text-lg font-bold text-[#1C1C1A]">
+                  <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-2 mb-2 sm:mb-3">
+                    <span className="text-base sm:text-lg font-bold text-[#1C1C1A]">
                       ₹{product.price.toFixed(2)}
                     </span>
+                    {product.originalPrice && (
+                      <span className="text-[11px] sm:text-sm text-[#8C867C] line-through">
+                        ₹{product.originalPrice.toFixed(2)}
+                      </span>
+                    )}
                   </div>
                   
                   <div className="flex items-center justify-between mt-auto">

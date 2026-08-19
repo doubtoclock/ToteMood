@@ -11,18 +11,17 @@ export function ProductTop({ product }: { product: Product }) {
   const router = useRouter();
   const addItem = useCartStore((state) => state.addItem);
 
-  const originalPrice = product.price * 1.2;
+  const originalPrice = product.originalPrice || (product.price * 1.2);
   const savings = originalPrice - product.price;
 
-  // Mock thumbnails (duplicate main image)
-  const thumbnails = [
+  const thumbnails = product.gallery || [
     product.image,
     product.image,
     product.image,
     product.image
   ];
 
-  const [activeImage, setActiveImage] = useState(0);
+  const [activeImage, setActiveImage] = useState(thumbnails[0]);
 
   return (
     <section className="py-8 md:py-12">
@@ -35,7 +34,7 @@ export function ProductTop({ product }: { product: Product }) {
             <div className="relative aspect-square md:aspect-[4/5] w-full overflow-hidden rounded-[24px] bg-[#EAECE3] shadow-sm flex items-center justify-center p-8">
               <div className="relative w-full h-full">
                 <Image
-                  src={thumbnails[activeImage]}
+                  src={activeImage}
                   alt={product.name}
                   fill
                   className="object-contain"
@@ -58,9 +57,9 @@ export function ProductTop({ product }: { product: Product }) {
               {thumbnails.map((thumb, index) => (
                 <button
                   key={index}
-                  onClick={() => setActiveImage(index)}
+                  onClick={() => setActiveImage(thumb)}
                   className={`relative aspect-square rounded-[16px] overflow-hidden bg-[#EAECE3] border-2 transition-all ${
-                    activeImage === index ? "border-[#757D5C]" : "border-transparent hover:border-[#1C1C1A]/20"
+                    activeImage === thumb ? "border-[#757D5C]" : "border-transparent hover:border-[#1C1C1A]/20"
                   }`}
                 >
                   <Image
