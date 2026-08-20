@@ -72,7 +72,7 @@ export function clearStoredAccountProfile() {
   window.localStorage.removeItem(ACCOUNT_TOKEN_KEY);
 }
 
-export function accountAuthHeaders() {
+export function accountAuthHeaders(): Record<string, string> {
   const token = getStoredAccountToken();
   return token ? { Authorization: `Bearer ${token}` } : {};
 }

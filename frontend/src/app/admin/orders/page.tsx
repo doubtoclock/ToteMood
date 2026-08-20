@@ -127,7 +127,7 @@ export default function AdminOrders() {
       order.items.map(i => `${i.product?.name || 'Unknown'} x${i.quantity}`).join("; ")
     ]);
 
-    const escape = (v: string) => `"${v.replace(/"/g, '""')}"`;
+    const escape = (v: string | number) => `"${String(v).replace(/"/g, '""')}"`;
     const csv = [headers.map(escape).join(","), ...rows.map(r => r.map(escape).join(","))].join("\n");
     const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
     const url = URL.createObjectURL(blob);
