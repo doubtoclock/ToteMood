@@ -16,7 +16,7 @@ type GLTFResult = GLTF & {
   }
 }
 
-export function ToteModel(props: JSX.IntrinsicElements['group'] & { textureIndex?: number }) {
+export function ToteModel(props: React.JSX.IntrinsicElements['group'] & { textureIndex?: number }) {
   const { textureIndex = 0, ...groupProps } = props;
 
   const { scene } = useGLTF('/3Dmodel/tote_web.glb')

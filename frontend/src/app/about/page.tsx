@@ -18,7 +18,7 @@ export default function AboutPage() {
           position="top-[10%] left-[-10%]"
           width="w-[50vw]"
           height="h-[50vw]"
-          shape="organic"
+          shape="organic1"
         />
         <Container className="relative z-10">
           
