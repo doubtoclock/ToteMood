@@ -1272,6 +1272,54 @@ app.delete('/api/orders/:id', async (req, res) => {
   }
 });
 
+// --- Admin Dashboard Stats ---
+
+app.get('/api/admin/stats', async (_req, res) => {
+  try {
+    const [totalOrders, revenueResult, activeProducts] = await Promise.all([
+      prisma.order.count(),
+      prisma.order.aggregate({ _sum: { total: true }, where: { status: 'COMPLETED' } }),
+      prisma.product.count(),
+    ]);
+
+    res.json({
+      totalOrders,
+      totalRevenue: revenueResult._sum.total || 0,
+      activeProducts,
+    });
+  } catch (error) {
+    console.error("Failed to fetch admin stats:", error);
+    res.status(500).json({ error: "Failed to fetch admin stats" });
+  }
+});
+
+app.get('/api/admin/revenue-chart', async (_req, res) => {
+  try {
+    const orders = await prisma.order.findMany({
+      where: { status: 'COMPLETED' },
+      select: { total: true, createdAt: true },
+      orderBy: { createdAt: 'asc' },
+    });
+
+    const dailyRevenue: Record<string, number> = {};
+    for (const order of orders) {
+      const dateStr = order.createdAt.toISOString();
+      const date = dateStr.split('T')[0] ?? dateStr.slice(0, 10);
+      dailyRevenue[date] = (dailyRevenue[date] || 0) + order.total;
+    }
+
+    const chartData = Object.entries(dailyRevenue).map(([date, revenue]) => ({
+      date,
+      revenue: Math.round(revenue * 100) / 100,
+    }));
+
+    res.json(chartData);
+  } catch (error) {
+    console.error("Failed to fetch revenue chart:", error);
+    res.status(500).json({ error: "Failed to fetch revenue chart" });
+  }
+});
+
 // Start Server
 httpServer.listen(port, () => {
   console.log(`Backend server running on port ${port} with Socket.IO enabled`);

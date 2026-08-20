@@ -1,8 +1,8 @@
 "use client";
 
-import { useCallback, useState, useEffect } from "react";
+import { useCallback, useState, useEffect, useRef } from "react";
 import Image from "next/image";
-import { Plus, Edit2, Trash2, X, Upload } from "lucide-react";
+import { Plus, Edit2, Trash2, X, Upload, ImageIcon } from "lucide-react";
 import { apiFetch, SOCKET_URL } from "@/lib/api";
 import { io } from "socket.io-client";
 
@@ -33,7 +33,10 @@ export default function AdminProducts() {
   const [inventoryCount, setInventoryCount] = useState("0");
   const [isCustomizable, setIsCustomizable] = useState(false);
   const [image, setImage] = useState("");
+  const [imagePreview, setImagePreview] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isDragOver, setIsDragOver] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const fetchProducts = useCallback(() => {
     apiFetch<AdminProduct[]>('/api/products')
@@ -56,6 +59,36 @@ export default function AdminProducts() {
     };
   }, [fetchProducts]);
 
+  const processFile = (file: File) => {
+    if (!file.type.startsWith('image/')) {
+      alert('Please upload an image file');
+      return;
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      alert('Image must be under 5MB');
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => {
+      const result = reader.result as string;
+      setImage(result);
+      setImagePreview(result);
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) processFile(file);
+  };
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragOver(false);
+    const file = e.dataTransfer.files?.[0];
+    if (file) processFile(file);
+  };
+
   const openAddModal = () => {
     setEditingProduct(null);
     setName("");
@@ -66,6 +99,7 @@ export default function AdminProducts() {
     setInventoryCount("0");
     setIsCustomizable(false);
     setImage("");
+    setImagePreview("");
     setIsModalOpen(true);
   };
 
@@ -79,6 +113,7 @@ export default function AdminProducts() {
     setInventoryCount(product.inventoryCount.toString());
     setIsCustomizable(product.isCustomizable);
     setImage(product.image);
+    setImagePreview(product.image);
     setIsModalOpen(true);
   };
 
@@ -107,7 +142,7 @@ export default function AdminProducts() {
       category,
       inventoryCount: parseInt(inventoryCount, 10),
       isCustomizable,
-      image: image || "/images/product_mockup.png" // fallback
+      image: image || "/images/product_mockup.png"
     };
 
     try {
@@ -272,18 +307,43 @@ export default function AdminProducts() {
 
                 <div className="space-y-4">
                   <div>
-                    <label className="text-xs font-bold uppercase tracking-widest text-[#5A5A55] block mb-2">Product Image (URL)</label>
-                    <div className="flex items-center gap-4">
-                      {image ? (
-                        <div className="w-24 h-24 relative rounded-xl border border-[#1C1C1A]/10 overflow-hidden bg-[#EAECE3]">
-                          <Image src={image} alt="Preview" fill className="object-cover" />
-                        </div>
+                    <label className="text-xs font-bold uppercase tracking-widest text-[#5A5A55] block mb-2">Product Image</label>
+                    <input
+                      ref={fileInputRef}
+                      type="file"
+                      accept="image/*"
+                      onChange={handleFileChange}
+                      className="hidden"
+                    />
+                    <div
+                      onClick={() => fileInputRef.current?.click()}
+                      onDragOver={(e) => { e.preventDefault(); setIsDragOver(true); }}
+                      onDragLeave={() => setIsDragOver(false)}
+                      onDrop={handleDrop}
+                      className={`relative w-full h-48 rounded-xl border-2 border-dashed transition-colors cursor-pointer overflow-hidden flex flex-col items-center justify-center gap-3 ${
+                        isDragOver ? 'border-[#757D5C] bg-[#757D5C]/5' : imagePreview ? 'border-[#1C1C1A]/10' : 'border-[#1C1C1A]/20 hover:border-[#757D5C]/50'
+                      }`}
+                    >
+                      {imagePreview ? (
+                        <>
+                          <Image src={imagePreview} alt="Preview" fill className="object-contain p-2" />
+                          <div className="absolute inset-0 bg-black/0 hover:bg-black/10 transition-colors flex items-center justify-center opacity-0 hover:opacity-100">
+                            <div className="bg-white rounded-full p-2 shadow-lg">
+                              <Upload className="w-5 h-5 text-[#1C1C1A]" />
+                            </div>
+                          </div>
+                        </>
                       ) : (
-                        <div className="w-24 h-24 rounded-xl border-2 border-dashed border-[#1C1C1A]/20 flex items-center justify-center text-[#5A5A55]">
-                          <Upload className="w-6 h-6" />
-                        </div>
+                        <>
+                          <div className="w-12 h-12 rounded-full bg-[#F8F6EF] flex items-center justify-center">
+                            <ImageIcon className="w-6 h-6 text-[#5A5A55]" />
+                          </div>
+                          <div className="text-center">
+                            <p className="text-sm font-bold text-[#1C1C1A]">Click to upload</p>
+                            <p className="text-xs text-[#5A5A55] mt-1">PNG, JPG up to 5MB</p>
+                          </div>
+                        </>
                       )}
-                      <input type="text" value={image} onChange={e => setImage(e.target.value)} placeholder="/images/product_mockup.png" className="flex-1 bg-white border border-[#1C1C1A]/20 rounded-xl px-4 py-3 text-[#1C1C1A] text-sm focus:outline-none focus:border-[#757D5C]" />
                     </div>
                   </div>
                   <div>
