@@ -1,16 +1,9 @@
 import Image from "next/image";
 import Link from "next/link";
 import { Star, ChevronLeft, ChevronRight } from "lucide-react";
-import { Product, fetchProducts } from "@/lib/products";
+import { Product } from "@/lib/data/products";
 
-export async function ProductRelated({ currentProductId }: { currentProductId: string }) {
-  let products: Product[] = [];
-  try {
-    products = await fetchProducts();
-  } catch (error) {
-    console.error("Failed to fetch related products:", error);
-  }
-
+export function ProductRelated({ currentProductId, products }: { currentProductId: string; products: Product[] }) {
   // Get 3-4 related products (excluding current one)
   const relatedProducts = products.filter(p => p.id !== currentProductId).slice(0, 4);
 
@@ -32,7 +25,7 @@ export async function ProductRelated({ currentProductId }: { currentProductId: s
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 md:gap-8">
-          {relatedProducts.map((product) => (
+          {relatedProducts.map((product: Product) => (
             <Link 
               href={`/shop/${product.id}`} 
               key={product.id}
@@ -70,9 +63,11 @@ export async function ProductRelated({ currentProductId }: { currentProductId: s
                   <span className="text-base font-bold text-[#1C1C1A]">
                     ₹{product.price.toFixed(2)}
                   </span>
-                  <span className="text-xs text-[#8C867C] line-through">
-                    ₹{(product.price * 1.2).toFixed(2)}
-                  </span>
+                  {product.oldPrice && (
+                    <span className="text-xs text-[#8C867C] line-through">
+                      ₹{product.oldPrice.toFixed(2)}
+                    </span>
+                  )}
                 </div>
               </div>
             </Link>

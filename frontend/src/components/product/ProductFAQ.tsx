@@ -2,7 +2,6 @@
 
 import { useState } from "react";
 import { ChevronDown } from "lucide-react";
-import { motion, AnimatePresence } from "framer-motion";
 
 const FAQS = [
   {
@@ -23,44 +22,39 @@ export function ProductFAQ() {
   const [openIndex, setOpenIndex] = useState<number | null>(null);
 
   return (
-    <section className="py-12 md:py-16 bg-white">
-      <div className="container mx-auto px-6 lg:px-12 max-w-4xl">
-        <h2 className="text-xl md:text-2xl font-sans font-bold text-[#1C1C1A] uppercase tracking-wider mb-8">
+    <section className="py-20 bg-[#FAF9F8]">
+      <div className="container mx-auto px-6 lg:px-12 max-w-[800px]">
+        <h2 className="text-[28px] md:text-[36px] font-title text-[#252A1A] tracking-tight mb-8 text-center">
           Frequently Asked Questions
         </h2>
 
-        <div className="flex flex-col border-t border-[#1C1C1A]/10">
+        <div className="flex flex-col border-t border-[#E8E5DC]">
           {FAQS.map((faq, index) => (
-            <div key={index} className="border-b border-[#1C1C1A]/10">
+            <div key={index} className="border-b border-[#E8E5DC]">
               <button
                 className="w-full py-6 flex items-center justify-between text-left focus:outline-none group"
                 onClick={() => setOpenIndex(openIndex === index ? null : index)}
               >
-                <span className="text-lg font-medium text-[#1C1C1A] group-hover:text-[#757D5C] transition-colors">
+                <span className="text-[16px] font-bold text-[#252A1A] group-hover:text-[#8E9476] transition-colors">
                   {faq.question}
                 </span>
                 <ChevronDown 
-                  className={`w-5 h-5 text-[#1C1C1A] transition-transform duration-300 ${
+                  className={`w-5 h-5 text-[#8C867C] transition-transform duration-300 ${
                     openIndex === index ? "rotate-180" : ""
                   }`}
+                  strokeWidth={1.5}
                 />
               </button>
               
-              <AnimatePresence>
-                {openIndex === index && (
-                  <motion.div
-                    initial={{ height: 0, opacity: 0 }}
-                    animate={{ height: "auto", opacity: 1 }}
-                    exit={{ height: 0, opacity: 0 }}
-                    transition={{ duration: 0.3, ease: "easeInOut" }}
-                    className="overflow-hidden"
-                  >
-                    <p className="pb-6 text-[#5A5A55] text-base leading-relaxed">
-                      {faq.answer}
-                    </p>
-                  </motion.div>
-                )}
-              </AnimatePresence>
+              <div 
+                className={`overflow-hidden transition-all duration-300 ease-in-out ${
+                  openIndex === index ? "max-h-[200px] opacity-100" : "max-h-0 opacity-0"
+                }`}
+              >
+                <p className="pb-6 text-[#5A5A55] text-[15px] leading-[1.6]">
+                  {faq.answer}
+                </p>
+              </div>
             </div>
           ))}
         </div>

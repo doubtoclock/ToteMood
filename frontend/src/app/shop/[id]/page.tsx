@@ -1,4 +1,6 @@
-import { notFound } from "next/navigation";
+"use client";
+
+import { useParams } from "next/navigation";
 import { AmbientGlow } from "@/components/ui/AmbientGlow";
 import { ProductTop } from "@/components/product/ProductTop";
 import { ProductFeatures } from "@/components/product/ProductFeatures";
@@ -6,26 +8,28 @@ import { ProductReviews } from "@/components/product/ProductReviews";
 import { ProductFAQ } from "@/components/product/ProductFAQ";
 import { ProductRelated } from "@/components/product/ProductRelated";
 import { ScrollToTop } from "@/components/layout/ScrollToTop";
-import { fetchProduct } from "@/lib/products";
+import { useProducts } from "@/lib/useProducts";
+import Link from "next/link";
 
-interface PageProps {
-  params: Promise<{
-    id: string;
-  }>;
-}
-
-export default async function ProductPage({ params }: PageProps) {
-  const { id } = await params;
-  
-  let product = null;
-  try {
-    product = await fetchProduct(id);
-  } catch (error) {
-    console.error("Failed to fetch product:", error);
-  }
+export default function ProductPage() {
+  const params = useParams<{ id: string }>();
+  const id = params.id;
+  const { products, loading } = useProducts();
+  const product = products.find((p) => p.id === id);
 
   if (!product) {
-    notFound();
+    return (
+      <main className="min-h-screen bg-[#F8F6EF] pt-32 px-6 text-center">
+        <h1 className="text-[32px] font-title text-[#252A1A] mb-4">
+          {loading ? "Loading product" : "Product unavailable"}
+        </h1>
+        {!loading && (
+          <Link href="/shop" className="text-[13px] font-bold uppercase tracking-widest text-[#757D5C]">
+            Return to shop
+          </Link>
+        )}
+      </main>
+    );
   }
 
   return (
@@ -65,7 +69,7 @@ export default async function ProductPage({ params }: PageProps) {
         <ProductFAQ />
 
         {/* 5. Related Products */}
-        <ProductRelated currentProductId={product.id} />
+        <ProductRelated currentProductId={product.id} products={products} />
       </div>
     </main>
   );

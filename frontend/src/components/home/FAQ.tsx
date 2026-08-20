@@ -52,7 +52,7 @@ export function FAQ() {
   };
 
   return (
-    <Section className="bg-[#FFFCE6] py-16 md:py-32 border-t border-primary/10 relative overflow-hidden">
+    <Section id="faq" className="bg-[#FFFCE6] py-16 md:py-32 border-t border-primary/10 relative overflow-hidden">
       {/* FAQ - Keep mostly clean cream. Only use a very subtle background glow near one edge. */}
       <AmbientGlow
         color="bg-[#8E9476]"

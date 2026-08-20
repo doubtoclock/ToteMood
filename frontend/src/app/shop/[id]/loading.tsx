@@ -1,15 +1,45 @@
-import { Loader2 } from "lucide-react";
+import { Container } from "@/components/layout/Container";
+import { Section } from "@/components/layout/Section";
 
 export default function Loading() {
   return (
-    <div className="min-h-screen bg-[#F8F6EF] flex flex-col items-center justify-center">
-      <div className="relative flex items-center justify-center">
-        <div className="absolute inset-0 bg-[#EAECE3] rounded-full blur-xl opacity-50 animate-pulse"></div>
-        <Loader2 className="w-10 h-10 text-[#757D5C] animate-spin relative z-10" />
-      </div>
-      <p className="mt-6 text-sm font-bold uppercase tracking-widest text-[#5A5A55] animate-pulse">
-        Loading Product...
-      </p>
-    </div>
+    <main className="min-h-screen bg-[#FAF9F8] pt-28 pb-20">
+      <Section className="relative pt-0 md:pt-0">
+        <Container>
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-10 lg:gap-16 items-start max-w-[1200px] mx-auto">
+            {/* Left: Image Skeleton */}
+            <div className="w-full aspect-[4/5] lg:aspect-square bg-[#F5F3EC] animate-pulse rounded-[24px]"></div>
+
+            {/* Right: Info Skeleton */}
+            <div className="flex flex-col gap-6 py-4 lg:py-8">
+              {/* Breadcrumbs */}
+              <div className="w-32 h-4 bg-[#F5F3EC] animate-pulse rounded-[4px]"></div>
+              
+              {/* Title & Price */}
+              <div className="space-y-4">
+                <div className="w-3/4 h-12 bg-[#F5F3EC] animate-pulse rounded-[8px]"></div>
+                <div className="w-1/4 h-8 bg-[#F5F3EC] animate-pulse rounded-[6px]"></div>
+              </div>
+              
+              {/* Rating */}
+              <div className="w-40 h-5 bg-[#F5F3EC] animate-pulse rounded-[4px]"></div>
+              
+              {/* Description */}
+              <div className="space-y-3 mt-4">
+                <div className="w-full h-4 bg-[#F5F3EC] animate-pulse rounded-[4px]"></div>
+                <div className="w-full h-4 bg-[#F5F3EC] animate-pulse rounded-[4px]"></div>
+                <div className="w-5/6 h-4 bg-[#F5F3EC] animate-pulse rounded-[4px]"></div>
+              </div>
+              
+              {/* CTA */}
+              <div className="space-y-4 mt-8">
+                <div className="w-full h-14 bg-[#F5F3EC] animate-pulse rounded-[14px]"></div>
+                <div className="w-full h-14 bg-[#F5F3EC] animate-pulse rounded-[14px]"></div>
+              </div>
+            </div>
+          </div>
+        </Container>
+      </Section>
+    </main>
   );
 }

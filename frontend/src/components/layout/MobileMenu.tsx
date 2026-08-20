@@ -4,7 +4,6 @@ import { motion, AnimatePresence } from "framer-motion";
 import Link from "next/link";
 import { X } from "lucide-react";
 import { useEffect } from "react";
-import { usePathname } from "next/navigation";
 
 interface MobileMenuProps {
   isOpen: boolean;
@@ -12,7 +11,6 @@ interface MobileMenuProps {
 }
 
 export function MobileMenu({ isOpen, onClose }: MobileMenuProps) {
-  const pathname = usePathname();
   // Lock body scroll when menu is open
   useEffect(() => {
     if (isOpen) {
@@ -104,7 +102,17 @@ export function MobileMenu({ isOpen, onClose }: MobileMenuProps) {
                  <Link href="/contact" className="font-sans text-sm font-medium text-secondary-foreground hover:text-foreground transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" onClick={onClose}>
                    Contact
                  </Link>
-                 <Link href="/faq" className="font-sans text-sm font-medium text-secondary-foreground hover:text-foreground transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" onClick={onClose}>
+                 <Link 
+                   href="/#faq" 
+                   className="font-sans text-sm font-medium text-secondary-foreground hover:text-foreground transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" 
+                   onClick={(e) => {
+                     onClose();
+                     if (window.location.pathname === "/") {
+                       e.preventDefault();
+                       document.getElementById("faq")?.scrollIntoView({ behavior: "smooth" });
+                     }
+                   }}
+                 >
                    FAQ
                  </Link>
                </div>

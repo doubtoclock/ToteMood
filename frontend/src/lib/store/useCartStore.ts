@@ -1,7 +1,8 @@
 import { create } from 'zustand';
+import { Product } from '@/lib/data/products';
 
 export interface CartItem {
-  product: any;
+  product: Product;
   quantity: number;
   customImages?: (string | null)[]; // Array of Data URLs, length matches quantity
 }
@@ -11,10 +12,11 @@ interface CartStore {
   isOpen: boolean;
   
   // Actions
-  addItem: (product: any, quantity?: number) => void;
+  addItem: (product: Product, quantity?: number) => void;
   removeItem: (productId: string) => void;
   updateQuantity: (productId: string, quantity: number) => void;
   setCustomImage: (productId: string, imageIndex: number, imageStr: string) => void;
+  syncProducts: (products: Product[]) => void;
   clearCart: () => void;
   
   // Drawer state
@@ -100,6 +102,22 @@ export const useCartStore = create<CartStore>((set, get) => ({
         return item;
       })
     }));
+  },
+
+  syncProducts: (products) => {
+    if (products.length === 0) return;
+
+    set((state) => {
+      const productMap = new Map(products.map((product) => [product.id, product]));
+      return {
+        items: state.items
+          .filter((item) => productMap.has(item.product.id))
+          .map((item) => ({
+            ...item,
+            product: productMap.get(item.product.id) || item.product,
+          })),
+      };
+    });
   },
 
   clearCart: () => set({ items: [] }),

@@ -4,27 +4,49 @@ import { useState, useEffect } from "react";
 import { Eye, Download, User, Phone, MapPin, PackageOpen, Trash2, Loader2 } from "lucide-react";
 import Image from "next/image";
 import { io } from "socket.io-client";
+import { apiFetch, SOCKET_URL } from "@/lib/api";
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
-
-interface Order {
+interface AdminOrderItem {
   id: string;
-  [key: string]: any;
+  quantity: number;
+  priceAtPurchase: number;
+  customImageUrl?: string | null;
+  product?: {
+    name?: string;
+    image?: string;
+  } | null;
+}
+
+interface AdminOrder {
+  id: string;
+  customerEmail: string;
+  customerPhone: string;
+  customerFirstName: string;
+  customerLastName: string;
+  customerAddress: string;
+  customerCity: string;
+  customerState: string;
+  customerZip: string;
+  subtotal: number;
+  shipping: number;
+  total: number;
+  status: string;
+  createdAt: string;
+  items: AdminOrderItem[];
 }
 
 export default function AdminOrders() {
-  const [orders, setOrders] = useState<Order[]>([]);
+  const [orders, setOrders] = useState<AdminOrder[]>([]);
   const [loading, setLoading] = useState(true);
-  const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
+  const [selectedOrder, setSelectedOrder] = useState<AdminOrder | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [updatingId, setUpdatingId] = useState<string | null>(null);
 
   useEffect(() => {
     // Fetch initial orders
-    fetch(`${API_URL}/api/orders`)
-      .then(res => res.json())
+    apiFetch<AdminOrder[]>('/api/orders')
       .then(data => {
-        setOrders(Array.isArray(data) ? data : data.orders ?? []);
+        setOrders(data);
         setLoading(false);
       })
       .catch(err => {
@@ -33,18 +55,18 @@ export default function AdminOrders() {
       });
 
     // Setup Socket.IO connection
-    const socket = io(API_URL);
+    const socket = io(SOCKET_URL);
 
-    socket.on("new_order", (order) => {
+    socket.on("new_order", (order: AdminOrder) => {
       setOrders(prev => [order, ...prev]);
     });
 
-    socket.on("order_updated", (updatedOrder) => {
+    socket.on("order_updated", (updatedOrder: AdminOrder) => {
       setOrders(prev => prev.map(o => o.id === updatedOrder.id ? updatedOrder : o));
       setSelectedOrder(prev => (prev?.id === updatedOrder.id ? updatedOrder : prev));
     });
 
-    socket.on("order_deleted", (deletedId) => {
+    socket.on("order_deleted", (deletedId: string) => {
       setOrders(prev => prev.filter(o => o.id !== deletedId));
       setSelectedOrder(prev => (prev?.id === deletedId ? null : prev));
     });
@@ -58,7 +80,7 @@ export default function AdminOrders() {
     if (!confirm("Are you sure you want to delete this order?")) return;
     setDeletingId(id);
     try {
-      await fetch(`${API_URL}/api/orders/${id}`, {
+      await apiFetch(`/api/orders/${id}`, {
         method: 'DELETE'
       });
       // UI updates automatically via WebSocket
@@ -72,9 +94,8 @@ export default function AdminOrders() {
   const handleUpdateStatus = async (id: string, newStatus: string) => {
     setUpdatingId(id);
     try {
-      await fetch(`${API_URL}/api/orders/${id}`, {
+      await apiFetch(`/api/orders/${id}`, {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ status: newStatus })
       });
       // UI updates automatically via WebSocket
@@ -209,7 +230,7 @@ export default function AdminOrders() {
                 <div>
                   <h3 className="text-xs font-bold uppercase tracking-widest text-[#5A5A55] mb-4">Order Items</h3>
                   <div className="space-y-4">
-                    {selectedOrder.items.map((item: any) => (
+                    {selectedOrder.items.map((item) => (
                       <div key={item.id} className="flex gap-4 p-4 border border-[#1C1C1A]/10 rounded-xl">
                         <div className="w-16 h-16 relative rounded-lg bg-[#EAECE3] overflow-hidden shrink-0">
                           <Image src={item.product?.image || ''} alt={item.product?.name || 'Product'} fill className="object-cover" />
@@ -239,6 +260,14 @@ export default function AdminOrders() {
                     <span>Total</span>
                     <span>₹{selectedOrder.total.toFixed(2)}</span>
                   </div>
+                  <div className="flex justify-between text-sm font-bold text-[#757D5C]">
+                    <span>Paid online</span>
+                    <span>₹50.00</span>
+                  </div>
+                  <div className="flex justify-between text-sm font-bold text-[#1C1C1A]">
+                    <span>Cash on delivery</span>
+                    <span>₹{Math.max(0, selectedOrder.total - 50).toFixed(2)}</span>
+                  </div>
                 </div>
               </div>
             </div>
@@ -255,16 +284,18 @@ export default function AdminOrders() {
               </h3>
               
               <div className="flex-1 space-y-6">
-                {selectedOrder.items.filter((i: any) => i.customImageUrl).map((item: any, idx: number) => (
+                {selectedOrder.items.filter((i) => Boolean(i.customImageUrl)).map((item, idx) => {
+                  const customImageUrl = item.customImageUrl || "";
+                  return (
                   <div key={idx} className="bg-white p-3 rounded-xl border border-[#1C1C1A]/10 shadow-sm">
                     <div className="text-xs font-medium text-[#1C1C1A] mb-2 truncate" title={item.product?.name}>
                       For: {item.product?.name}
                     </div>
                     <div className="w-full aspect-square relative rounded-lg overflow-hidden bg-[#EAECE3] border border-[#1C1C1A]/5 mb-3">
-                      <Image src={item.customImageUrl} alt="Custom upload" fill className="object-cover" />
+                      <Image src={customImageUrl} alt="Custom upload" fill className="object-cover" />
                     </div>
                     <a 
-                      href={item.customImageUrl} 
+                      href={customImageUrl} 
                       download
                       target="_blank"
                       rel="noreferrer"
@@ -273,9 +304,10 @@ export default function AdminOrders() {
                       <Download className="w-3 h-3" /> Download Design
                     </a>
                   </div>
-                ))}
+                  );
+                })}
                 
-                {selectedOrder.items.filter((i: any) => i.customImageUrl).length === 0 && (
+                {selectedOrder.items.filter((i) => i.customImageUrl).length === 0 && (
                   <div className="text-sm text-[#5A5A55] text-center p-4 border border-dashed border-[#1C1C1A]/20 rounded-xl">
                     No custom images for this order.
                   </div>

@@ -6,14 +6,19 @@ import { PrismaClient } from '@prisma/client';
 import { createServer } from 'http';
 import { Server } from 'socket.io';
 import crypto from 'crypto';
+import path from 'path';
 
-dotenv.config();
+dotenv.config({ quiet: true });
+dotenv.config({ path: path.resolve(__dirname, '../.env'), quiet: true });
 
 const app = express();
 const port = process.env.PORT || 4000;
 
 const GOKWIK_APP_ID = process.env.GOKWIK_APP_ID || '';
 const GOKWIK_APP_SECRET = process.env.GOKWIK_APP_SECRET || '';
+const RAZORPAY_KEY_ID = process.env.RAZORPAY_KEY_ID || '';
+const RAZORPAY_KEY_SECRET = process.env.RAZORPAY_KEY_SECRET || '';
+const CHECKOUT_DEPOSIT_AMOUNT = 50;
 
 // Middleware
 app.use(cors());
@@ -62,6 +67,29 @@ interface CartSessionData {
 
 const cartSessions = new Map<string, CartSessionData>();
 
+interface PendingCheckout {
+  customerEmail: string;
+  customerPhone: string;
+  customerFirstName: string;
+  customerLastName: string;
+  customerAddress: string;
+  customerCity: string;
+  customerState: string;
+  customerZip: string;
+  subtotal: number;
+  shipping: number;
+  total: number;
+  items: Array<{
+    productId: string;
+    quantity: number;
+    price: number;
+    customImageUrl: string | null;
+  }>;
+  createdAt: number;
+}
+
+const pendingCheckouts = new Map<string, PendingCheckout>();
+
 // Cleanup stale sessions every 30 minutes
 setInterval(() => {
   const now = Date.now();
@@ -71,7 +99,201 @@ setInterval(() => {
       cartSessions.delete(key);
     }
   }
+  for (const [key, checkout] of pendingCheckouts) {
+    if (now - checkout.createdAt > THIRTY_MIN) {
+      pendingCheckouts.delete(key);
+    }
+  }
 }, 30 * 60 * 1000);
+
+function normalizePhone(phone: unknown) {
+  return String(phone || '').replace(/\D/g, '');
+}
+
+function hasCheckoutImage(value: unknown) {
+  const image = String(value || '').trim();
+  return image.startsWith('data:image/') || image.startsWith('http://') || image.startsWith('https://');
+}
+
+function hasAllCheckoutImages(item: any, quantity: number) {
+  if (Array.isArray(item.customImageUrls)) {
+    return item.customImageUrls.length >= quantity
+      && item.customImageUrls.slice(0, quantity).every(hasCheckoutImage);
+  }
+
+  return quantity === 1 && hasCheckoutImage(item.customImageUrl);
+}
+
+function validateCustomer(data: any) {
+  const errors: Record<string, string> = {};
+  const customer = {
+    customerEmail: String(data.customerEmail || '').trim(),
+    customerPhone: normalizePhone(data.customerPhone),
+    customerFirstName: String(data.customerFirstName || '').trim(),
+    customerLastName: String(data.customerLastName || '').trim(),
+    customerAddress: String(data.customerAddress || '').trim(),
+    customerCity: String(data.customerCity || '').trim(),
+    customerState: String(data.customerState || '').trim(),
+    customerZip: String(data.customerZip || '').trim(),
+  };
+
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(customer.customerEmail)) {
+    errors.customerEmail = 'Enter a valid email address.';
+  }
+  if (!/^[6-9]\d{9}$/.test(customer.customerPhone)) {
+    errors.customerPhone = 'Enter a valid 10 digit WhatsApp number.';
+  }
+  if (customer.customerFirstName.length < 2) errors.customerFirstName = 'First name is required.';
+  if (customer.customerLastName.length < 1) errors.customerLastName = 'Last name is required.';
+  if (customer.customerAddress.length < 8) errors.customerAddress = 'Enter a complete delivery address.';
+  if (customer.customerCity.length < 2) errors.customerCity = 'City is required.';
+  if (customer.customerState.length < 2) errors.customerState = 'State is required.';
+  if (!/^\d{6}$/.test(customer.customerZip)) errors.customerZip = 'Enter a valid 6 digit PIN code.';
+
+  return { customer, errors };
+}
+
+async function buildVerifiedCheckout(data: any): Promise<PendingCheckout> {
+  const { customer, errors } = validateCustomer(data);
+  const incomingItems = Array.isArray(data.items) ? data.items : [];
+
+  if (incomingItems.length === 0) {
+    errors.items = 'Your cart is empty.';
+  }
+
+  const productIds = incomingItems.map((item: any) => String(item.productId || item.id || ''));
+  const products = await prisma.product.findMany({
+    where: { id: { in: productIds } },
+  });
+  const productMap = new Map(products.map((product) => [product.id, product]));
+
+  const verifiedItems = incomingItems.map((item: any) => {
+    const productId = String(item.productId || item.id || '');
+    const product = productMap.get(productId);
+    const quantity = Math.max(1, Math.floor(Number(item.quantity) || 1));
+
+    if (!product) {
+      errors.items = 'One or more products are no longer available.';
+      return null;
+    }
+    if (product.inventoryCount < quantity) {
+      errors.items = `${product.name} has only ${product.inventoryCount} left in stock.`;
+      return null;
+    }
+    if (product.isCustomizable && !hasAllCheckoutImages(item, quantity)) {
+      errors.items = 'Please upload artwork for every custom tote before placing your order.';
+      return null;
+    }
+
+    const customImageUrl = Array.isArray(item.customImageUrls)
+      ? item.customImageUrls.find(hasCheckoutImage)
+      : item.customImageUrl;
+
+    return {
+      productId,
+      quantity,
+      price: product.price,
+      customImageUrl: String(customImageUrl || '').trim(),
+    };
+  }).filter(Boolean) as PendingCheckout['items'];
+
+  if (Object.keys(errors).length > 0) {
+    const error = new Error('Checkout validation failed') as Error & { details?: Record<string, string> };
+    error.details = errors;
+    throw error;
+  }
+
+  const subtotal = verifiedItems.reduce((sum, item) => sum + item.price * item.quantity, 0);
+  const shipping = subtotal > 150 ? 0 : 15;
+
+  return {
+    ...customer,
+    subtotal,
+    shipping,
+    total: subtotal + shipping,
+    items: verifiedItems,
+    createdAt: Date.now(),
+  };
+}
+
+async function createOrderFromCheckout(checkout: PendingCheckout, razorpayPaymentId?: string) {
+  const existingOrder = razorpayPaymentId
+    ? await prisma.order.findFirst({
+        where: { gokwikOrderId: razorpayPaymentId },
+        include: {
+          items: {
+            include: { product: true },
+          },
+        },
+      })
+    : null;
+
+  if (existingOrder) {
+    return existingOrder;
+  }
+
+  const createdOrder = await prisma.$transaction(async (tx) => {
+    for (const item of checkout.items) {
+      const updated = await tx.product.updateMany({
+        where: {
+          id: item.productId,
+          inventoryCount: { gte: item.quantity },
+        },
+        data: { inventoryCount: { decrement: item.quantity } },
+      });
+
+      if (updated.count !== 1) {
+        throw new Error('A product in this order is no longer available in the requested quantity.');
+      }
+    }
+
+    return tx.order.create({
+      data: {
+        gokwikOrderId: razorpayPaymentId || null,
+        customerEmail: checkout.customerEmail,
+        customerPhone: checkout.customerPhone,
+        customerFirstName: checkout.customerFirstName,
+        customerLastName: checkout.customerLastName,
+        customerAddress: checkout.customerAddress,
+        customerCity: checkout.customerCity,
+        customerState: checkout.customerState,
+        customerZip: checkout.customerZip,
+        subtotal: checkout.subtotal,
+        shipping: checkout.shipping,
+        total: checkout.total,
+        status: 'PROCESSING',
+        items: {
+          create: checkout.items.map((item) => ({
+            productId: item.productId,
+            quantity: item.quantity,
+            priceAtPurchase: item.price,
+            customImageUrl: item.customImageUrl,
+          })),
+        },
+      },
+    });
+  }, {
+    maxWait: 10_000,
+    timeout: 20_000,
+  });
+
+  const order = await prisma.order.findUnique({
+    where: { id: createdOrder.id },
+    include: {
+      items: {
+        include: { product: true },
+      },
+    },
+  });
+
+  if (!order) {
+    throw new Error('Order was created but could not be loaded.');
+  }
+
+  io.emit("new_order", order);
+  io.emit("products_updated");
+  return order;
+}
 
 // --- GoKwik Auth Middleware ---
 // GoKwik sends gk-app-id and gk-app-secret headers on all cart/order API calls.
@@ -122,6 +344,97 @@ app.post('/api/checkout/session', async (req, res) => {
   } catch (error) {
     console.error('Failed to create checkout session:', error);
     res.status(500).json({ error: 'Failed to create checkout session' });
+  }
+});
+
+app.post('/api/checkout/razorpay-order', async (req, res) => {
+  try {
+    if (!RAZORPAY_KEY_ID || !RAZORPAY_KEY_SECRET) {
+      return res.status(500).json({ error: 'Razorpay is not configured on the server.' });
+    }
+
+    const checkout = await buildVerifiedCheckout(req.body);
+    const receipt = 'tm_' + crypto.randomBytes(10).toString('hex');
+    const auth = Buffer.from(`${RAZORPAY_KEY_ID}:${RAZORPAY_KEY_SECRET}`).toString('base64');
+    const razorpayRes = await fetch('https://api.razorpay.com/v1/orders', {
+      method: 'POST',
+      headers: {
+        Authorization: `Basic ${auth}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        amount: CHECKOUT_DEPOSIT_AMOUNT * 100,
+        currency: 'INR',
+        receipt,
+        notes: {
+          cart_total: checkout.total.toFixed(2),
+          cod_balance: Math.max(0, checkout.total - CHECKOUT_DEPOSIT_AMOUNT).toFixed(2),
+          customer_phone: checkout.customerPhone,
+        },
+      }),
+    });
+
+    const razorpayOrder = await razorpayRes.json();
+    if (!razorpayRes.ok) {
+      console.error('Razorpay order creation failed:', razorpayOrder);
+      return res.status(502).json({ error: 'Unable to start Razorpay payment.' });
+    }
+
+    pendingCheckouts.set(razorpayOrder.id, checkout);
+
+    res.json({
+      key: RAZORPAY_KEY_ID,
+      razorpayOrderId: razorpayOrder.id,
+      amount: CHECKOUT_DEPOSIT_AMOUNT,
+      currency: 'INR',
+      total: checkout.total,
+      codBalance: Math.max(0, checkout.total - CHECKOUT_DEPOSIT_AMOUNT),
+    });
+  } catch (error: any) {
+    if (error.details) {
+      return res.status(400).json({ error: 'Please correct the highlighted details.', details: error.details });
+    }
+    console.error('Failed to create Razorpay checkout:', error);
+    res.status(500).json({ error: 'Failed to start checkout.' });
+  }
+});
+
+app.post('/api/checkout/verify-razorpay', async (req, res) => {
+  try {
+    const { razorpay_order_id, razorpay_payment_id, razorpay_signature } = req.body;
+
+    if (!RAZORPAY_KEY_SECRET) {
+      return res.status(500).json({ error: 'Razorpay is not configured on the server.' });
+    }
+    if (!razorpay_order_id || !razorpay_payment_id || !razorpay_signature) {
+      return res.status(400).json({ error: 'Missing Razorpay payment verification details.' });
+    }
+
+    const expectedSignature = crypto
+      .createHmac('sha256', RAZORPAY_KEY_SECRET)
+      .update(`${razorpay_order_id}|${razorpay_payment_id}`)
+      .digest('hex');
+
+    if (expectedSignature !== razorpay_signature) {
+      return res.status(400).json({ error: 'Payment verification failed.' });
+    }
+
+    const checkout = pendingCheckouts.get(razorpay_order_id);
+    if (!checkout) {
+      return res.status(404).json({ error: 'Checkout session expired. Please try again.' });
+    }
+
+    const order = await createOrderFromCheckout(checkout, razorpay_payment_id);
+    pendingCheckouts.delete(razorpay_order_id);
+
+    res.status(201).json({
+      order,
+      paidNow: CHECKOUT_DEPOSIT_AMOUNT,
+      codBalance: Math.max(0, checkout.total - CHECKOUT_DEPOSIT_AMOUNT),
+    });
+  } catch (error: any) {
+    console.error('Failed to verify Razorpay payment:', error);
+    res.status(500).json({ error: error.message || 'Failed to place order.' });
   }
 });
 
@@ -474,7 +787,7 @@ app.post('/gokwik/v1/cart/remove-out-of-stock-items', gokwikAuthMiddleware, (_re
 app.get('/api/products', async (_req, res) => {
   try {
     const products = await prisma.product.findMany({
-      orderBy: { createdAt: 'desc' }
+      orderBy: { createdAt: 'asc' }
     });
     res.json(products);
   } catch (error) {
@@ -509,6 +822,7 @@ app.post('/api/products', async (req, res) => {
         inventoryCount: data.inventoryCount || 0,
       }
     });
+    io.emit("products_updated");
     res.status(201).json(product);
   } catch (error) {
     console.error("Failed to create product:", error);
@@ -532,6 +846,7 @@ app.put('/api/products/:id', async (req, res) => {
         inventoryCount: data.inventoryCount || 0,
       }
     });
+    io.emit("products_updated");
     res.json(product);
   } catch (error) {
     console.error("Failed to update product:", error);
@@ -542,6 +857,7 @@ app.put('/api/products/:id', async (req, res) => {
 app.delete('/api/products/:id', async (req, res) => {
   try {
     await prisma.product.delete({ where: { id: req.params.id } });
+    io.emit("products_updated");
     res.json({ success: true, id: req.params.id });
   } catch (error) {
     console.error("Failed to delete product:", error);
@@ -570,41 +886,15 @@ app.get('/api/orders', async (_req, res) => {
 
 app.post('/api/orders', async (req, res) => {
   try {
-    const data = req.body;
-    const order = await prisma.order.create({
-      data: {
-        customerEmail: data.customerEmail,
-        customerPhone: data.customerPhone,
-        customerFirstName: data.customerFirstName,
-        customerLastName: data.customerLastName,
-        customerAddress: data.customerAddress,
-        customerCity: data.customerCity,
-        customerState: data.customerState,
-        customerZip: data.customerZip,
-        subtotal: data.subtotal,
-        shipping: data.shipping,
-        total: data.total,
-        items: {
-          create: data.items.map((item: any) => ({
-            productId: item.productId,
-            quantity: item.quantity,
-            priceAtPurchase: item.price,
-            customImageUrl: item.customImageUrl || null
-          }))
-        }
-      },
-      include: {
-        items: {
-          include: { product: true }
-        }
-      }
-    });
-
-    io.emit("new_order", order);
+    const checkout = await buildVerifiedCheckout(req.body);
+    const order = await createOrderFromCheckout(checkout);
     res.status(201).json(order);
-  } catch (error) {
+  } catch (error: any) {
+    if (error.details) {
+      return res.status(400).json({ error: 'Please correct the highlighted details.', details: error.details });
+    }
     console.error("Failed to create order:", error);
-    res.status(500).json({ error: "Failed to create order" });
+    res.status(500).json({ error: error.message || "Failed to create order" });
   }
 });
 

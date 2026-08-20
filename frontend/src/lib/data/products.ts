@@ -3,6 +3,7 @@ export interface Product {
   name: string;
   description: string;
   price: number;
+  oldPrice?: number | null;
   originalPrice?: number;
   image: string;
   gallery?: string[];
@@ -18,6 +19,7 @@ export const products: Product[] = [
     name: "CUSTOM GHIBLI ART TOTE BAG",
     description: "Bag will have custom Ghibli image only. Add size and approval on WhatsApp after placing orders.",
     price: 499,
+    oldPrice: 599,
     originalPrice: 599,
     image: "/images/product/W1.png",
     gallery: [
@@ -36,6 +38,7 @@ export const products: Product[] = [
     name: "CUSTOM GHIBLI TOTE BAG WITH TEXT",
     description: "Custom Ghibli image + custom text. Add size and approval on WhatsApp after placing orders.",
     price: 599,
+    oldPrice: 749,
     originalPrice: 749,
     image: "/images/product/W5.png",
     gallery: [
@@ -54,6 +57,7 @@ export const products: Product[] = [
     name: "CUTE EMOJI WITH GHIBLI TOTE",
     description: "Emoji and text around Ghibli bags. Add size and approval on WhatsApp after placing orders.",
     price: 599,
+    oldPrice: 719,
     originalPrice: 719,
     image: "/images/product/W9.png",
     gallery: [
@@ -72,6 +76,7 @@ export const products: Product[] = [
     name: "POLAROID TOTE BAG",
     description: "Old vintage type Polaroid design. Add size and approval on WhatsApp after placing orders.",
     price: 499,
+    oldPrice: 599,
     originalPrice: 599,
     image: "/images/product/W13.png",
     gallery: [
@@ -90,6 +95,7 @@ export const products: Product[] = [
     name: "ANY DESIGN TOTE BAG",
     description: "Customer can customise any ready to print design. Add size and approval on WhatsApp after placing orders.",
     price: 499,
+    oldPrice: 599,
     originalPrice: 599,
     image: "/images/product/W17.png",
     gallery: [

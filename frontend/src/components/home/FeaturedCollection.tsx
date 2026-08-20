@@ -1,22 +1,15 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React from "react";
 import Image from "next/image";
 import { motion } from "framer-motion";
 import Link from "next/link";
 import { AmbientGlow } from "@/components/ui/AmbientGlow";
-import { Product, normalizeProductsPayload } from "@/lib/products";
+import { useProducts } from "@/lib/useProducts";
 
 export function FeaturedCollection() {
-  const [featuredProducts, setFeaturedProducts] = useState<Product[]>([]);
-
-  useEffect(() => {
-    const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
-    fetch(`${apiUrl}/api/products`)
-      .then(res => res.json())
-      .then(data => setFeaturedProducts(normalizeProductsPayload(data).slice(0, 4)))
-      .catch(err => console.error(err));
-  }, []);
+  const { products } = useProducts();
+  const featuredProducts = products.slice(0, 4);
 
   return (
     <section className="relative w-full py-24 lg:py-32 bg-[#EBE7DF] overflow-hidden">

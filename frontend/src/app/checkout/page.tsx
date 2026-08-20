@@ -4,100 +4,98 @@ import { useCartStore } from "@/lib/store/useCartStore";
 import { AmbientGlow } from "@/components/ui/AmbientGlow";
 import Image from "next/image";
 import Link from "next/link";
-import { Upload, CheckCircle2, ArrowLeft, Loader2, AlertCircle, X } from "lucide-react";
-import { useState, useRef, useCallback, useEffect } from "react";
+import { Upload, CheckCircle2, ArrowLeft, Loader2, Lock, Check, WalletCards } from "lucide-react";
+import { useEffect, useState, useRef } from "react";
+import { apiFetch } from "@/lib/api";
+import { useProducts } from "@/lib/useProducts";
 
 declare global {
   interface Window {
-    gokwikSdk?: {
-      initCheckout: (config: any) => void;
-      on: (event: string, callback: (data?: any) => void) => void;
-      close: () => void;
-    };
+    Razorpay?: new (options: Record<string, unknown>) => { open: () => void };
   }
 }
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
-const GOKWIK_MERCHANT_ID = process.env.NEXT_PUBLIC_GOKWIK_MERCHANT_ID || "";
-const GOKWIK_ENV = process.env.NEXT_PUBLIC_GOKWIK_ENV || "sandbox";
+const DEPOSIT_AMOUNT = 50;
+const VERIFY_RETRY_DELAYS_MS = [1000, 2000];
 
-const GOKWIK_SDK_URLS: Record<string, string> = {
-  dev: "https://dev.pdp.gokwik.co/v4/build/gokwik.js",
-  qa: "https://qa.pdp.gokwik.co/v4/build/gokwik.js",
-  sandbox: "https://sandbox.pdp.gokwik.co/v4/build/gokwik.js",
-  production: "https://pdp.gokwik.co/v4/build/gokwik.js",
-};
-
-function loadGoKwikSDK(): Promise<void> {
-  return new Promise((resolve, reject) => {
-    if (typeof window !== "undefined" && window.gokwikSdk) {
-      resolve();
-      return;
-    }
-
-    const existing = document.querySelector(
-      `script[src*="pdp.gokwik.co"]`
-    );
-    if (existing) {
-      existing.addEventListener("load", () => resolve());
-      existing.addEventListener("error", () => reject(new Error("GoKwik SDK load failed")));
-      return;
-    }
-
-    const script = document.createElement("script");
-    script.src = GOKWIK_SDK_URLS[GOKWIK_ENV] || GOKWIK_SDK_URLS.sandbox;
-    script.async = true;
-    script.onload = () => resolve();
-    script.onerror = () => reject(new Error("GoKwik SDK load failed"));
-    document.head.appendChild(script);
-  });
+interface RazorpayPaymentResponse {
+  razorpay_order_id: string;
+  razorpay_payment_id: string;
+  razorpay_signature: string;
 }
 
-function dismissGoKwikOverlay() {
-  // Force-close any GoKwik overlay/modal that may be stuck
-  const overlays = document.querySelectorAll(
-    '[id*="gokwik"], [class*="gokwik"], [data-gokwik], iframe[src*="gokwik"]'
-  );
-  overlays.forEach((el) => el.remove());
-
-  // Also try removing any full-screen overlays GoKwik may have injected
-  document.querySelectorAll("div").forEach((el) => {
-    const style = window.getComputedStyle(el);
-    if (
-      style.position === "fixed" &&
-      parseInt(style.zIndex, 10) > 999 &&
-      el.querySelector('[class*="gokwik"], [id*="gokwik"]')
-    ) {
-      el.remove();
-    }
-  });
-}
-
-function forceCloseGoKwik() {
-  try {
-    if (window.gokwikSdk && typeof window.gokwikSdk.close === "function") {
-      window.gokwikSdk.close();
-    }
-  } catch (_) {
-    // ignore
-  }
-  dismissGoKwikOverlay();
-}
+const wait = (delayMs: number) => new Promise((resolve) => setTimeout(resolve, delayMs));
 
 export default function CheckoutPage() {
-  const { items, getTotal, setCustomImage, clearCart } = useCartStore();
-
+  const { items, getTotal, setCustomImage, clearCart, syncProducts } = useCartStore();
+  const { products: liveProducts } = useProducts();
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  
   const [activeUpload, setActiveUpload] = useState<{ id: string; index: number } | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
   const [isSuccess, setIsSuccess] = useState(false);
-  const [sdkError, setSdkError] = useState<string | null>(null);
-  const fileInputRef = useRef<HTMLInputElement>(null);
-  const checkoutInitiated = useRef(false);
-  const retryCount = useRef(0);
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
+  const [checkoutError, setCheckoutError] = useState("");
+  const [confirmedOrderId, setConfirmedOrderId] = useState("");
 
   const subtotal = getTotal();
   const shipping = subtotal > 150 ? 0 : 15;
   const total = subtotal + shipping;
+  const codBalance = Math.max(0, total - DEPOSIT_AMOUNT);
+
+  useEffect(() => {
+    syncProducts(liveProducts);
+  }, [liveProducts, syncProducts]);
+
+  const loadRazorpay = () =>
+    new Promise<boolean>((resolve) => {
+      if (window.Razorpay) return resolve(true);
+      const script = document.createElement("script");
+      script.src = "https://checkout.razorpay.com/v1/checkout.js";
+      script.onload = () => resolve(true);
+      script.onerror = () => resolve(false);
+      document.body.appendChild(script);
+    });
+
+  const validateForm = (data: Record<string, string>) => {
+    const errors: Record<string, string> = {};
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(data.email)) errors.email = "Enter a valid email address.";
+    if (!/^[6-9]\d{9}$/.test(data.phone.replace(/\D/g, ""))) errors.phone = "Enter a valid 10 digit WhatsApp number.";
+    if (data.firstName.trim().length < 2) errors.firstName = "First name is required.";
+    if (!data.lastName.trim()) errors.lastName = "Last name is required.";
+    if (data.address.trim().length < 8) errors.address = "Enter a complete delivery address.";
+    if (data.city.trim().length < 2) errors.city = "City is required.";
+    if (data.state.trim().length < 2) errors.state = "State is required.";
+    if (!/^\d{6}$/.test(data.zip.trim())) errors.zip = "Enter a valid 6 digit PIN code.";
+    return errors;
+  };
+
+  const missingArtworkCount = () =>
+    items.reduce((count, item) => {
+      if (!item.product.isCustomizable) return count;
+      const missingForItem = Array.from({ length: item.quantity }).filter((_, index) => !item.customImages?.[index]).length;
+      return count + missingForItem;
+    }, 0);
+
+  const verifyRazorpayPayment = async (response: RazorpayPaymentResponse) => {
+    let lastError: unknown;
+
+    for (let attempt = 0; attempt <= VERIFY_RETRY_DELAYS_MS.length; attempt += 1) {
+      try {
+        return await apiFetch<{ order: { id: string } }>('/api/checkout/verify-razorpay', {
+          method: 'POST',
+          body: JSON.stringify(response),
+        });
+      } catch (error) {
+        lastError = error;
+        const delay = VERIFY_RETRY_DELAYS_MS[attempt];
+        if (!delay) break;
+        await wait(delay);
+      }
+    }
+
+    throw lastError;
+  };
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -111,159 +109,139 @@ export default function CheckoutPage() {
     }
   };
 
-  const dismissAndReset = useCallback(() => {
-    forceCloseGoKwik();
-    setIsProcessing(false);
-    checkoutInitiated.current = false;
-  }, []);
+  const handleCheckout = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    setCheckoutError("");
+    setFieldErrors({});
 
-  // Auto-detect stuck GoKwik overlay after 15 seconds
-  const stuckTimeout = useRef<NodeJS.Timeout | null>(null);
-
-  const startStuckTimer = useCallback(() => {
-    stuckTimeout.current = setTimeout(() => {
-      if (checkoutInitiated.current && isProcessing) {
-        setSdkError(
-          "GoKwik checkout appears to be stuck. This usually means GoKwik servers cannot reach your backend."
-        );
-      }
-    }, 15000);
-  }, [isProcessing]);
-
-  const clearStuckTimer = useCallback(() => {
-    if (stuckTimeout.current) {
-      clearTimeout(stuckTimeout.current);
-      stuckTimeout.current = null;
+    const formData = new FormData(e.currentTarget);
+    const formValues = {
+      email: String(formData.get('email') || ''),
+      phone: String(formData.get('phone') || ''),
+      firstName: String(formData.get('firstName') || ''),
+      lastName: String(formData.get('lastName') || ''),
+      address: String(formData.get('address') || ''),
+      city: String(formData.get('city') || ''),
+      state: String(formData.get('state') || ''),
+      zip: String(formData.get('zip') || ''),
+    };
+    const localErrors = validateForm(formValues);
+    if (Object.keys(localErrors).length > 0) {
+      setFieldErrors(localErrors);
+      return;
     }
-  }, []);
+    const missingImages = missingArtworkCount();
+    if (missingImages > 0) {
+      const message = missingImages === 1
+        ? "Please upload artwork for your custom tote before payment."
+        : `Please upload artwork for all ${missingImages} custom totes before payment.`;
+      setFieldErrors({ items: message });
+      setCheckoutError(message);
+      return;
+    }
 
-  const initializeGoKwikCheckout = useCallback(async () => {
-    if (checkoutInitiated.current) return;
-    checkoutInitiated.current = true;
-    retryCount.current++;
+    setIsProcessing(true);
+
+    const orderData = {
+      customerEmail: formValues.email,
+      customerPhone: formValues.phone,
+      customerFirstName: formValues.firstName,
+      customerLastName: formValues.lastName,
+      customerAddress: formValues.address,
+      customerCity: formValues.city,
+      customerState: formValues.state,
+      customerZip: formValues.zip,
+      items: items.map(item => ({
+        productId: item.product.id,
+        quantity: item.quantity,
+        price: item.product.price,
+        customImageUrl: item.customImages?.[0] || null,
+        customImageUrls: item.customImages?.slice(0, item.quantity) || []
+      }))
+    };
 
     try {
-      setSdkError(null);
-      setIsProcessing(true);
-      startStuckTimer();
-
-      // 1. Load GoKwik SDK
-      await loadGoKwikSDK();
-
-      if (!window.gokwikSdk) {
-        throw new Error("GoKwik SDK failed to load. Check your internet connection.");
+      const loaded = await loadRazorpay();
+      const RazorpayCheckout = window.Razorpay;
+      if (!loaded || !RazorpayCheckout) {
+        throw new Error("Razorpay could not be loaded. Please check your connection and try again.");
       }
 
-      // 2. Create checkout session on our backend
-      const sessionRes = await fetch(`${API_URL}/api/checkout/session`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          items: items.map((item) => ({
-            id: item.product.id,
-            name: item.product.name,
-            quantity: item.quantity,
-            price: item.product.price,
-            image: item.product.image,
-            customImageUrl: item.customImages?.[0] || null,
-          })),
-          subtotal,
-          shipping,
-          total,
-        }),
+      const paymentOrder = await apiFetch<{
+        key: string;
+        razorpayOrderId: string;
+        amount: number;
+        currency: string;
+        total: number;
+        codBalance: number;
+      }>('/api/checkout/razorpay-order', {
+        method: 'POST',
+        body: JSON.stringify(orderData)
       });
 
-      if (!sessionRes.ok) {
-        throw new Error("Failed to create checkout session. Is the backend running?");
+      await new Promise<void>((resolve, reject) => {
+        const razorpay = new RazorpayCheckout({
+          key: paymentOrder.key,
+          amount: DEPOSIT_AMOUNT * 100,
+          currency: paymentOrder.currency,
+          name: "ToteMood",
+          description: "₹50 advance. Remaining amount is cash on delivery.",
+          order_id: paymentOrder.razorpayOrderId,
+          prefill: {
+            name: `${formValues.firstName} ${formValues.lastName}`,
+            email: formValues.email,
+            contact: formValues.phone,
+          },
+          theme: {
+            color: "#8E9476",
+          },
+          modal: {
+            ondismiss: () => reject(new Error("Payment was cancelled before completion.")),
+          },
+          handler: async (response: RazorpayPaymentResponse) => {
+            try {
+              const result = await verifyRazorpayPayment(response);
+              setConfirmedOrderId(result.order.id);
+              setIsSuccess(true);
+              clearCart();
+              resolve();
+            } catch (err) {
+              reject(err);
+            }
+          },
+        });
+        razorpay.open();
+      });
+    } catch (error: unknown) {
+      console.error("Error creating order:", error);
+      if (error && typeof error === "object" && "details" in error) {
+        const details = (error as { details?: Record<string, string> }).details;
+        if (details) setFieldErrors(details);
       }
-
-      const sessionData = await sessionRes.json();
-      const sessionId = sessionData.sessionId;
-
-      // 3. Listen for GoKwik SDK events
-      window.gokwikSdk.on("order-complete", (order: any) => {
-        console.log("GoKwik order-complete:", order);
-        clearStuckTimer();
-        setIsProcessing(false);
-        setIsSuccess(true);
-        clearCart();
-      });
-
-      window.gokwikSdk.on("checkout-close", () => {
-        console.log("GoKwik checkout closed by user");
-        clearStuckTimer();
-        setIsProcessing(false);
-        checkoutInitiated.current = false;
-      });
-
-      window.gokwikSdk.on("checkout-initiation-failure", (error: any) => {
-        console.error("GoKwik checkout initiation failed:", error);
-        clearStuckTimer();
-        forceCloseGoKwik();
-        setSdkError(
-          "GoKwik could not connect to our server. " +
-          "Make sure your backend is publicly accessible (GoKwik servers need to reach it)."
-        );
-        setIsProcessing(false);
-        checkoutInitiated.current = false;
-      });
-
-      window.gokwikSdk.on("payment-failure", (error: any) => {
-        console.error("GoKwik payment failure:", error);
-        clearStuckTimer();
-        setSdkError("Payment failed. Please try again.");
-        setIsProcessing(false);
-        checkoutInitiated.current = false;
-      });
-
-      // 4. Initialize GoKwik checkout
-      window.gokwikSdk.initCheckout({
-        environment: GOKWIK_ENV,
-        type: "merchantInfo",
-        mid: GOKWIK_MERCHANT_ID,
-        merchantParams: {
-          merchantCheckoutId: sessionId,
-        },
-      });
-    } catch (error) {
-      console.error("GoKwik checkout error:", error);
-      clearStuckTimer();
-      setSdkError(
-        error instanceof Error
-          ? error.message
-          : "Failed to initialize checkout. Please try again."
-      );
+      setCheckoutError(error instanceof Error ? error.message : "Could not place your order. Please try again.");
+    } finally {
       setIsProcessing(false);
-      checkoutInitiated.current = false;
     }
-  }, [items, subtotal, shipping, total, clearCart, startStuckTimer, clearStuckTimer]);
-
-  // Cleanup on unmount
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  const cleanup = useCallback(() => {
-    clearStuckTimer();
-    if (window.gokwikSdk) {
-      forceCloseGoKwik();
-    }
-  }, [clearStuckTimer]);
-
-  useEffect(() => {
-    return cleanup;
-  }, [cleanup]);
+  };
 
   if (isSuccess) {
     return (
-      <main className="min-h-screen bg-[#F8F6EF] pt-32 pb-24 relative overflow-hidden flex flex-col items-center justify-center text-center px-6">
+      <main className="min-h-screen bg-[#FAF9F8] pt-32 pb-24 relative overflow-hidden flex flex-col items-center justify-center text-center px-6">
         <AmbientGlow color="bg-[#C4C9B3]" opacity={0.2} position="top-[10%] left-[20%]" shape="organic1" />
         
-        <div className="bg-white p-10 md:p-16 rounded-[32px] shadow-lg max-w-lg w-full relative z-10 border border-[#1C1C1A]/10">
-          <CheckCircle2 className="w-20 h-20 text-[#757D5C] mx-auto mb-6" />
-          <h1 className="text-3xl font-serif text-[#1C1C1A] mb-4">Order Confirmed</h1>
-          <p className="text-[#5A5A55] mb-8">
-            Thank you for your purchase! We&apos;ve received your order and will begin processing it right away.
+        <div className="bg-white p-10 md:p-16 rounded-[24px] shadow-sm max-w-lg w-full relative z-10 border border-[#E8E5DC]">
+          <CheckCircle2 className="w-16 h-16 text-[#8E9476] mx-auto mb-6" strokeWidth={1.5} />
+          <h1 className="text-[32px] font-title text-[#252A1A] mb-4">Order Confirmed</h1>
+          <p className="text-[#686B59] mb-10 leading-[1.6]">
+            Thank you! We received your ₹50 advance payment. The remaining amount is cash on delivery, and your example Ghibli image will be sent over your WhatsApp number.
           </p>
-          <Link href="/shop" className="inline-block bg-[#1C1C1A] text-white px-8 py-4 rounded-full font-bold uppercase tracking-widest text-sm hover:bg-black transition-colors">
-            Continue Shopping
+          {confirmedOrderId && (
+            <p className="text-[12px] font-bold uppercase tracking-widest text-[#8C867C] mb-6">
+              Order #{confirmedOrderId.slice(-6).toUpperCase()}
+            </p>
+          )}
+          <Link href="/shop" className="inline-flex items-center justify-center bg-[#252A1A] text-white h-[54px] px-10 rounded-[14px] font-bold uppercase tracking-[0.1em] text-[13px] hover:bg-[#3A3E2F] transition-colors shadow-sm">
+            Continue Shopping &rarr;
           </Link>
         </div>
       </main>
@@ -272,140 +250,175 @@ export default function CheckoutPage() {
 
   if (items.length === 0) {
     return (
-      <main className="min-h-screen bg-[#F8F6EF] pt-32 pb-24 flex flex-col items-center justify-center text-center px-6">
-        <h1 className="text-3xl font-serif text-[#1C1C1A] mb-4">Your Cart is Empty</h1>
-        <Link href="/shop" className="inline-block bg-[#1C1C1A] text-white px-8 py-4 rounded-full font-bold uppercase tracking-widest text-sm hover:bg-black transition-colors">
+      <main className="min-h-screen bg-[#FAF9F8] pt-32 pb-24 flex flex-col items-center justify-center text-center px-6">
+        <h1 className="text-[32px] font-title text-[#252A1A] mb-4">Your Cart is Empty</h1>
+        <Link href="/shop" className="inline-flex items-center justify-center bg-[#252A1A] text-white h-[54px] px-10 rounded-[14px] font-bold uppercase tracking-[0.1em] text-[13px] hover:bg-[#3A3E2F] transition-colors shadow-sm">
           Return to Shop
         </Link>
       </main>
     );
   }
 
-  return (
-    <main className="min-h-screen bg-[#F8F6EF] pt-24 md:pt-32 pb-24 relative">
-      <AmbientGlow color="bg-[#C4C9B3]" opacity={0.1} position="top-[0%] right-[0%]" shape="organic2" />
+  const inputClass = "w-full bg-[#F5F3EC] border border-[#E8E5DC] rounded-[14px] px-5 h-[54px] text-[15px] text-[#252A1A] placeholder:text-[#8C867C] focus:outline-none focus:border-[#8E9476] focus:bg-white transition-colors shadow-sm";
+  const errorClass = "mt-1.5 text-[12px] font-medium text-[#B5483B]";
+  const inputWithError = (name: string) => `${inputClass} ${fieldErrors[name] ? "border-[#B5483B] bg-[#FFF8F6]" : ""}`;
 
-      {/* Floating dismiss button — appears when GoKwik overlay is stuck */}
-      {isProcessing && (
-        <button
-          type="button"
-          onClick={dismissAndReset}
-          className="fixed top-6 right-6 z-[9999] bg-[#1C1C1A] text-white w-12 h-12 rounded-full shadow-2xl flex items-center justify-center hover:bg-black transition-colors"
-          title="Close GoKwik checkout"
-        >
-          <X className="w-6 h-6" />
-        </button>
-      )}
-      
-      <div className="container mx-auto px-4 md:px-8 max-w-6xl relative z-10">
+  return (
+    <main className="min-h-screen bg-[#FAF9F8] pt-24 md:pt-32 pb-24 relative">
+      <div className="container mx-auto px-6 lg:px-12 max-w-[1100px] relative z-10">
         
-        <Link href="/shop" className="inline-flex items-center text-sm font-medium uppercase tracking-widest text-[#5A5A55] hover:text-[#1C1C1A] transition-colors mb-8 md:mb-12">
-          <ArrowLeft className="w-4 h-4 mr-2" />
+        <Link href="/shop" className="inline-flex items-center text-[12px] font-bold uppercase tracking-widest text-[#8C867C] hover:text-[#252A1A] transition-colors mb-6 md:mb-8">
+          <ArrowLeft className="w-3.5 h-3.5 mr-2" />
           Back to Shop
         </Link>
 
-        <h1 className="text-3xl md:text-4xl font-serif text-[#1C1C1A] mb-10">Checkout</h1>
+        <div className="flex flex-col md:flex-row md:items-end justify-between mb-10 gap-4">
+          <h1 className="text-[36px] md:text-[42px] font-title text-[#252A1A] leading-none">Checkout</h1>
+          <div className="text-[13px] font-medium text-[#8C867C] flex items-center gap-2">
+            <span className="text-[#252A1A]">1 Contact</span> &middot; <span>2 Shipping</span> &middot; <span>3 Payment</span>
+          </div>
+        </div>
 
-        <div className="flex flex-col lg:flex-row gap-12 lg:gap-16">
+        <form onSubmit={handleCheckout} className="flex flex-col lg:flex-row gap-12 lg:gap-16 items-start">
           
-          {/* Left Column: GoKwik Checkout */}
-          <div className="w-full lg:w-3/5">
-            <div className="bg-white p-8 rounded-[32px] border border-[#1C1C1A]/10 text-center flex flex-col items-center">
-              <div className="w-16 h-16 bg-[#F8F6EF] rounded-full flex items-center justify-center mb-6">
-                <CheckCircle2 className="w-8 h-8 text-[#757D5C]" />
-              </div>
-              <h2 className="text-2xl font-serif text-[#1C1C1A] mb-4">Express Checkout</h2>
-              <p className="text-[#5A5A55] mb-8 max-w-md">
-                We use GoKwik for a faster, more secure checkout experience. Your address and contact details will be automatically filled using KwikPass.
-              </p>
-
-              {sdkError && (
-                <div className="w-full sm:w-3/4 mb-4 p-4 bg-red-50 border border-red-200 rounded-xl flex flex-col gap-3 text-sm text-red-700">
-                  <div className="flex items-start gap-3">
-                    <AlertCircle className="w-5 h-5 shrink-0 mt-0.5" />
-                    <div className="flex-1">
-                      <p className="font-bold mb-1">Checkout Error</p>
-                      <p>{sdkError}</p>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => setSdkError(null)}
-                      className="text-red-400 hover:text-red-600"
-                    >
-                      <X className="w-4 h-4" />
-                    </button>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      dismissAndReset();
-                      setTimeout(() => initializeGoKwikCheckout(), 100);
-                    }}
-                    className="self-center px-6 py-2 bg-red-600 text-white rounded-full text-xs font-bold uppercase tracking-widest hover:bg-red-700 transition-colors"
-                  >
-                    Retry
-                  </button>
+          {/* Left Column: Form */}
+          <div className="w-full lg:w-[55%] flex flex-col gap-12">
+            
+            {/* Contact Information */}
+            <section>
+              <h2 className="text-[20px] font-title text-[#252A1A] mb-6 flex items-center gap-3">
+                <span className="flex items-center justify-center w-7 h-7 rounded-full bg-[#252A1A] text-white text-[12px] font-bold">1</span>
+                Contact Information
+              </h2>
+              <div className="flex flex-col gap-4">
+                <div>
+                  <input name="email" type="email" placeholder="Email Address" autoComplete="email" required className={inputWithError("email")} />
+                  {fieldErrors.email && <p className={errorClass}>{fieldErrors.email}</p>}
                 </div>
-              )}
-
-              <button 
-                type="button"
-                onClick={() => {
-                  dismissAndReset();
-                  clearStuckTimer();
-                  setTimeout(() => initializeGoKwikCheckout(), 50);
-                }}
-                disabled={isProcessing}
-                className="w-full sm:w-3/4 bg-[#757D5C] text-white py-5 rounded-full font-bold uppercase tracking-[0.1em] text-lg hover:bg-[#5C6348] transition-colors shadow-lg disabled:opacity-70 disabled:cursor-not-allowed flex items-center justify-center gap-3 relative overflow-hidden"
-              >
-                {isProcessing && (
-                  <div className="absolute inset-0 bg-[#5C6348] flex items-center justify-center">
-                    <Loader2 className="w-6 h-6 animate-spin" />
+                <div>
+                  <input name="phone" type="tel" placeholder="WhatsApp Number" autoComplete="tel" pattern="[6-9][0-9]{9}" maxLength={10} required className={inputWithError("phone")} />
+                  {fieldErrors.phone && <p className={errorClass}>{fieldErrors.phone}</p>}
+                </div>
+                <div className="flex items-center gap-3 mt-1 ml-1">
+                  <div className="relative flex items-center">
+                    <input type="checkbox" id="newsletter" className="peer appearance-none w-[18px] h-[18px] border border-[#E8E5DC] rounded-[4px] bg-white checked:bg-[#8E9476] checked:border-[#8E9476] cursor-pointer transition-colors shadow-sm" defaultChecked />
+                    <Check className="w-3 h-3 text-white absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 pointer-events-none opacity-0 peer-checked:opacity-100" strokeWidth={3} />
                   </div>
-                )}
-                Checkout with GoKwik
-              </button>
-            </div>
+                  <label htmlFor="newsletter" className="text-[14px] text-[#5A5A55] cursor-pointer">Email me with news and offers</label>
+                </div>
+              </div>
+            </section>
+
+            {/* Shipping Address */}
+            <section>
+              <h2 className="text-[20px] font-title text-[#252A1A] mb-6 flex items-center gap-3">
+                <span className="flex items-center justify-center w-7 h-7 rounded-full bg-[#252A1A] text-white text-[12px] font-bold">2</span>
+                Shipping Address
+              </h2>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <input name="firstName" type="text" placeholder="First Name" autoComplete="given-name" minLength={2} required className={inputWithError("firstName")} />
+                  {fieldErrors.firstName && <p className={errorClass}>{fieldErrors.firstName}</p>}
+                </div>
+                <div>
+                  <input name="lastName" type="text" placeholder="Last Name" autoComplete="family-name" required className={inputWithError("lastName")} />
+                  {fieldErrors.lastName && <p className={errorClass}>{fieldErrors.lastName}</p>}
+                </div>
+                <div className="sm:col-span-2">
+                  <input name="address" type="text" placeholder="Address" autoComplete="street-address" minLength={8} required className={inputWithError("address")} />
+                  {fieldErrors.address && <p className={errorClass}>{fieldErrors.address}</p>}
+                </div>
+                <div>
+                  <input name="city" type="text" placeholder="City" autoComplete="address-level2" required className={inputWithError("city")} />
+                  {fieldErrors.city && <p className={errorClass}>{fieldErrors.city}</p>}
+                </div>
+                <div className="flex gap-4">
+                  <div className="w-1/2">
+                    <input name="state" type="text" placeholder="State" autoComplete="address-level1" required className={inputWithError("state")} />
+                    {fieldErrors.state && <p className={errorClass}>{fieldErrors.state}</p>}
+                  </div>
+                  <div className="w-1/2">
+                    <input name="zip" type="text" placeholder="PIN Code" autoComplete="postal-code" inputMode="numeric" pattern="[0-9]{6}" maxLength={6} required className={inputWithError("zip")} />
+                    {fieldErrors.zip && <p className={errorClass}>{fieldErrors.zip}</p>}
+                  </div>
+                </div>
+              </div>
+            </section>
+
+            <section>
+              <h2 className="text-[20px] font-title text-[#252A1A] mb-6 flex items-center gap-3">
+                <span className="flex items-center justify-center w-7 h-7 rounded-full bg-[#252A1A] text-white text-[12px] font-bold">3</span>
+                Payment
+              </h2>
+              <div className="bg-white p-6 rounded-[20px] border border-[#E8E5DC] shadow-sm">
+                <div className="flex items-start gap-4">
+                  <div className="h-11 w-11 rounded-[12px] bg-[#F5F3EC] flex items-center justify-center text-[#757D5C]">
+                    <WalletCards className="h-5 w-5" />
+                  </div>
+                  <div>
+                    <p className="text-[15px] font-bold text-[#252A1A]">Pay only ₹50 now</p>
+                    <p className="text-[13px] text-[#686B59] leading-[1.6] mt-1">
+                      The remaining ₹{codBalance.toFixed(2)} is cash on delivery. Your example Ghibli image will be sent over your WhatsApp number before dispatch.
+                    </p>
+                  </div>
+                </div>
+                <div className="mt-5 flex items-center gap-2 text-[#5A5A55]">
+                  <Lock className="w-4 h-4" />
+                  <span className="text-[13px] font-medium">Secure Razorpay payment in ToteMood colors.</span>
+                </div>
+              </div>
+            </section>
           </div>
 
           {/* Right Column: Order Summary */}
-          <div className="w-full lg:w-2/5">
-            <div className="bg-white p-6 md:p-8 rounded-[32px] border border-[#1C1C1A]/10 sticky top-32">
-              <h2 className="text-2xl font-serif text-[#1C1C1A] mb-6">Order Summary</h2>
-              
-              <div className="flex flex-col gap-6 mb-8">
+          <div className="w-full lg:w-[45%] lg:sticky lg:top-24">
+            <div className="bg-white p-6 md:p-8 rounded-[24px] border border-[#E8E5DC] shadow-sm">
+              <h2 className="text-[24px] font-title text-[#252A1A] mb-8">Order Summary</h2>
+              {fieldErrors.items && (
+                <p className="mb-5 rounded-[12px] border border-[#E7B7AE] bg-[#FFF8F6] px-4 py-3 text-[13px] font-medium text-[#B5483B]">
+                  {fieldErrors.items}
+                </p>
+              )}
+
+              <div className="flex flex-col gap-8 mb-8">
                 {items.map((item) => (
                   <div key={item.product.id} className="flex flex-col gap-4">
                     <div className="flex gap-4">
-                      <div className="relative w-20 h-20 rounded-xl bg-[#EAECE3] overflow-hidden shrink-0 border border-[#1C1C1A]/5">
-                        <Image src={item.product.image} alt={item.product.name} fill className="object-cover mix-blend-multiply" />
-                        <span className="absolute -top-2 -right-2 w-6 h-6 bg-[#1C1C1A] text-white text-xs flex items-center justify-center rounded-full z-10 border-2 border-white">
+                      <div className="relative shrink-0">
+                        <div className="w-[92px] h-[92px] rounded-[12px] bg-[#F5F3EC] overflow-hidden border border-[#E8E5DC] relative">
+                          <Image src={item.product.image} alt={item.product.name} fill className="object-cover mix-blend-multiply" />
+                        </div>
+                        <span className="absolute -top-2 -right-2 w-[22px] h-[22px] bg-[#686B59] text-white text-[11px] font-bold flex items-center justify-center rounded-full z-10 shadow-sm border-2 border-white">
                           {item.quantity}
                         </span>
                       </div>
-                      <div className="flex flex-col flex-1 justify-center">
-                        <h3 className="text-sm font-bold text-[#1C1C1A]">{item.product.name}</h3>
-                        <p className="text-xs text-[#5A5A55] mb-2">{item.product.category}</p>
-                        <span className="font-bold text-[#1C1C1A]">₹{(item.product.price * item.quantity).toFixed(2)}</span>
+                      <div className="flex flex-col flex-1 justify-center py-1">
+                        <h3 className="text-[14px] font-medium text-[#252A1A] mb-1">{item.product.name}</h3>
+                        <p className="text-[12px] text-[#8C867C] mb-2">{item.product.category}</p>
+                        <span className="font-bold text-[14px] text-[#252A1A]">₹{(item.product.price * item.quantity).toFixed(2)}</span>
                       </div>
                     </div>
 
-                    {/* Image Upload for Customizable Products */}
+                    {/* Premium Image Upload Module */}
                     {item.product.isCustomizable && (
                       <div className="flex flex-col gap-3">
                         {Array.from({ length: item.quantity }).map((_, idx) => {
                           const uploadedImage = item.customImages?.[idx];
+                          const showImageError = Boolean(fieldErrors.items && !uploadedImage);
                           return (
-                            <div key={idx} className="bg-[#F8F6EF] rounded-xl p-4 border border-dashed border-[#1C1C1A]/20">
+                            <div key={idx}>
                               {uploadedImage ? (
-                                <div className="flex items-center justify-between">
+                                <div className="bg-[#FAF9F8] rounded-[12px] p-4 border border-[#E8E5DC] flex items-center justify-between">
                                   <div className="flex items-center gap-3">
-                                    <div className="w-10 h-10 rounded-md overflow-hidden relative border border-[#1C1C1A]/10">
-                                      <Image src={uploadedImage} alt="Uploaded" fill className="object-cover" />
+                                    <div className="w-[48px] h-[48px] rounded-[8px] overflow-hidden relative border border-[#E8E5DC] bg-white">
+                                      <Image src={uploadedImage} alt="Uploaded preview" fill className="object-cover" />
                                     </div>
-                                    <span className="text-xs font-medium text-[#757D5C] flex items-center gap-1">
-                                      <CheckCircle2 className="w-4 h-4" /> Image {item.quantity > 1 ? idx + 1 : ''} Uploaded
-                                    </span>
+                                    <div className="flex flex-col">
+                                      <span className="text-[13px] font-medium text-[#252A1A] flex items-center gap-1.5">
+                                        <CheckCircle2 className="w-3.5 h-3.5 text-[#8E9476]" /> 
+                                        Artwork attached
+                                      </span>
+                                    </div>
                                   </div>
                                   <button 
                                     type="button"
@@ -413,7 +426,7 @@ export default function CheckoutPage() {
                                       setActiveUpload({ id: item.product.id, index: idx });
                                       fileInputRef.current?.click();
                                     }}
-                                    className="text-xs font-bold uppercase tracking-wider text-[#1C1C1A] hover:underline"
+                                    className="text-[11px] font-bold uppercase tracking-widest text-[#8C867C] hover:text-[#252A1A] transition-colors"
                                   >
                                     Change
                                   </button>
@@ -425,12 +438,13 @@ export default function CheckoutPage() {
                                     setActiveUpload({ id: item.product.id, index: idx });
                                     fileInputRef.current?.click();
                                   }}
-                                  className="w-full py-4 border-2 border-dashed border-[#1C1C1A]/30 rounded-lg flex flex-col items-center justify-center gap-2 text-[#5A5A55] hover:border-[#757D5C] hover:text-[#757D5C] transition-colors bg-white"
+                                  className={`w-full h-[80px] border border-dashed rounded-[12px] flex flex-col items-center justify-center transition-colors ${showImageError ? "bg-[#FFF8F6] border-[#B5483B]" : "bg-[#F5F3EC] border-[#8C867C]/50 hover:border-[#8E9476] hover:bg-[#FAF9F8]"}`}
                                 >
-                                  <Upload className="w-5 h-5" />
-                                  <span className="text-xs font-bold uppercase tracking-widest">
-                                    Upload Custom Image {item.quantity > 1 ? idx + 1 : ''}
-                                  </span>
+                                  <div className="flex items-center gap-2 mb-1.5">
+                                    <Upload className="w-[14px] h-[14px] text-[#8C867C]" strokeWidth={2} />
+                                    <span className="text-[13px] font-bold text-[#252A1A]">Upload your artwork</span>
+                                  </div>
+                                  <span className="text-[11px] text-[#8C867C]">PNG or JPG &middot; Max 10MB</span>
                                 </button>
                               )}
                             </div>
@@ -447,29 +461,64 @@ export default function CheckoutPage() {
                 type="file" 
                 ref={fileInputRef} 
                 onChange={handleFileChange} 
-                accept="image/*" 
+                accept="image/png, image/jpeg" 
                 className="hidden" 
               />
 
-              <div className="flex flex-col gap-3 pt-6 border-t border-[#1C1C1A]/10">
-                <div className="flex justify-between text-[#5A5A55] text-sm">
+              <div className="flex flex-col gap-4 pt-6 border-t border-[#E8E5DC]">
+                <div className="flex justify-between text-[#5A5A55] text-[14px]">
                   <span>Subtotal</span>
-                  <span>₹{subtotal.toFixed(2)}</span>
+                  <span className="font-medium text-[#252A1A]">₹{subtotal.toFixed(2)}</span>
                 </div>
-                <div className="flex justify-between text-[#5A5A55] text-sm">
+                <div className="flex justify-between text-[#5A5A55] text-[14px]">
                   <span>Shipping</span>
-                  <span>{shipping === 0 ? "Free" : `₹${shipping.toFixed(2)}`}</span>
+                  <span className="font-medium text-[#252A1A]">{shipping === 0 ? "Free" : `₹${shipping.toFixed(2)}`}</span>
                 </div>
-                <div className="flex justify-between text-xl font-bold text-[#1C1C1A] mt-4 pt-4 border-t border-[#1C1C1A]/10">
+                <div className="flex justify-between text-[18px] font-bold text-[#252A1A] mt-2 pt-6 border-t border-[#E8E5DC]">
                   <span>Total</span>
                   <span>₹{total.toFixed(2)}</span>
+                </div>
+                <div className="flex justify-between text-[#757D5C] text-[14px] font-bold">
+                  <span>Pay now</span>
+                  <span>₹{DEPOSIT_AMOUNT.toFixed(2)}</span>
+                </div>
+                <div className="flex justify-between text-[#5A5A55] text-[14px]">
+                  <span>Cash on delivery</span>
+                  <span className="font-medium text-[#252A1A]">₹{codBalance.toFixed(2)}</span>
+                </div>
+              </div>
+
+              {/* Final CTA Area */}
+              <div className="mt-8 flex flex-col gap-4">
+                <button 
+                  type="submit" 
+                  disabled={isProcessing}
+                  className="w-full bg-[#252A1A] text-white h-[54px] rounded-[14px] font-bold uppercase tracking-[0.1em] text-[13px] hover:bg-[#3A3E2F] transition-colors shadow-sm disabled:opacity-70 disabled:cursor-not-allowed flex items-center justify-center gap-2 group relative overflow-hidden"
+                >
+                  {isProcessing ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <>
+                      Pay ₹50 advance
+                      <span className="transform group-hover:translate-x-1 transition-transform">&rarr;</span>
+                    </>
+                  )}
+                </button>
+                {checkoutError && (
+                  <p className="text-center text-[13px] font-medium text-[#B5483B]">
+                    {checkoutError}
+                  </p>
+                )}
+                <div className="flex items-center justify-center gap-1.5 text-[#8C867C]">
+                  <Lock className="w-[12px] h-[12px]" strokeWidth={2} />
+                  <span className="text-[11px] font-medium">₹50 online now &middot; rest payable by COD</span>
                 </div>
               </div>
 
             </div>
           </div>
 
-        </div>
+        </form>
       </div>
     </main>
   );
