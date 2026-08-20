@@ -8,6 +8,7 @@ import { Upload, CheckCircle2, ArrowLeft, Loader2, Lock, Check, WalletCards } fr
 import { useEffect, useState, useRef } from "react";
 import { apiFetch } from "@/lib/api";
 import { useProducts } from "@/lib/useProducts";
+import { SavedAddress, accountAuthHeaders, getStoredAccountProfile, getStoredAccountToken } from "@/lib/account";
 
 declare global {
   interface Window {
@@ -25,6 +26,17 @@ interface RazorpayPaymentResponse {
 }
 
 const wait = (delayMs: number) => new Promise((resolve) => setTimeout(resolve, delayMs));
+const emptyCheckoutForm = {
+  email: "",
+  phone: "",
+  firstName: "",
+  lastName: "",
+  address: "",
+  city: "",
+  state: "",
+  zip: "",
+  addressNickname: "Other",
+};
 
 export default function CheckoutPage() {
   const { items, getTotal, setCustomImage, clearCart, syncProducts } = useCartStore();
@@ -37,6 +49,19 @@ export default function CheckoutPage() {
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [checkoutError, setCheckoutError] = useState("");
   const [confirmedOrderId, setConfirmedOrderId] = useState("");
+  const [accountToken] = useState(() => getStoredAccountToken());
+  const [savedAddresses, setSavedAddresses] = useState<SavedAddress[]>([]);
+  const [selectedAddressId, setSelectedAddressId] = useState("other");
+  const [saveAddress, setSaveAddress] = useState(false);
+  const [formValues, setFormValues] = useState(() => {
+    const profile = getStoredAccountProfile();
+    return {
+      ...emptyCheckoutForm,
+      email: profile.email,
+      firstName: profile.firstName,
+      lastName: profile.lastName,
+    };
+  });
 
   const subtotal = getTotal();
   const shipping = subtotal > 150 ? 0 : 15;
@@ -46,6 +71,46 @@ export default function CheckoutPage() {
   useEffect(() => {
     syncProducts(liveProducts);
   }, [liveProducts, syncProducts]);
+
+  const setFormValue = (key: keyof typeof emptyCheckoutForm, value: string) => {
+    setSelectedAddressId("other");
+    setFormValues((current) => ({
+      ...current,
+      [key]: value,
+      addressNickname: key === "addressNickname" ? value : current.addressNickname,
+    }));
+  };
+
+  const applySavedAddress = (address: SavedAddress) => {
+    setSelectedAddressId(address.id);
+    setSaveAddress(false);
+    setFormValues({
+      email: address.email,
+      phone: address.phone,
+      firstName: address.firstName,
+      lastName: address.lastName,
+      address: address.address,
+      city: address.city,
+      state: address.state,
+      zip: address.zip,
+      addressNickname: address.nickname,
+    });
+  };
+
+  useEffect(() => {
+    if (!accountToken) return;
+    apiFetch<SavedAddress[]>("/api/account/addresses", { headers: accountAuthHeaders() })
+      .then((addresses) => {
+        setSavedAddresses(addresses);
+        const defaultAddress = addresses.find((address) => address.isDefault) || addresses[0];
+        if (defaultAddress) {
+          applySavedAddress(defaultAddress);
+        }
+      })
+      .catch(() => {
+        setSavedAddresses([]);
+      });
+  }, [accountToken]);
 
   const loadRazorpay = () =>
     new Promise<boolean>((resolve) => {
@@ -114,17 +179,6 @@ export default function CheckoutPage() {
     setCheckoutError("");
     setFieldErrors({});
 
-    const formData = new FormData(e.currentTarget);
-    const formValues = {
-      email: String(formData.get('email') || ''),
-      phone: String(formData.get('phone') || ''),
-      firstName: String(formData.get('firstName') || ''),
-      lastName: String(formData.get('lastName') || ''),
-      address: String(formData.get('address') || ''),
-      city: String(formData.get('city') || ''),
-      state: String(formData.get('state') || ''),
-      zip: String(formData.get('zip') || ''),
-    };
     const localErrors = validateForm(formValues);
     if (Object.keys(localErrors).length > 0) {
       setFieldErrors(localErrors);
@@ -148,6 +202,9 @@ export default function CheckoutPage() {
       customerFirstName: formValues.firstName,
       customerLastName: formValues.lastName,
       customerAddress: formValues.address,
+      addressNickname: selectedAddressId === "other" ? (formValues.addressNickname || "Other") : formValues.addressNickname,
+      saveAddress,
+      accountToken,
       customerCity: formValues.city,
       customerState: formValues.state,
       customerZip: formValues.zip,
@@ -292,11 +349,11 @@ export default function CheckoutPage() {
               </h2>
               <div className="flex flex-col gap-4">
                 <div>
-                  <input name="email" type="email" placeholder="Email Address" autoComplete="email" required className={inputWithError("email")} />
+                  <input name="email" type="email" placeholder="Email Address" autoComplete="email" required value={formValues.email} onChange={(event) => setFormValue("email", event.target.value)} className={inputWithError("email")} />
                   {fieldErrors.email && <p className={errorClass}>{fieldErrors.email}</p>}
                 </div>
                 <div>
-                  <input name="phone" type="tel" placeholder="WhatsApp Number" autoComplete="tel" pattern="[6-9][0-9]{9}" maxLength={10} required className={inputWithError("phone")} />
+                  <input name="phone" type="tel" placeholder="WhatsApp Number" autoComplete="tel" pattern="[6-9][0-9]{9}" maxLength={10} required value={formValues.phone} onChange={(event) => setFormValue("phone", event.target.value)} className={inputWithError("phone")} />
                   {fieldErrors.phone && <p className={errorClass}>{fieldErrors.phone}</p>}
                 </div>
                 <div className="flex items-center gap-3 mt-1 ml-1">
@@ -315,33 +372,68 @@ export default function CheckoutPage() {
                 <span className="flex items-center justify-center w-7 h-7 rounded-full bg-[#252A1A] text-white text-[12px] font-bold">2</span>
                 Shipping Address
               </h2>
+              {accountToken && savedAddresses.length > 0 && (
+                <div className="mb-5">
+                  <select
+                    value={selectedAddressId}
+                    onChange={(event) => {
+                      const nextId = event.target.value;
+                      if (nextId === "other") {
+                        setSelectedAddressId("other");
+                        setFormValues((current) => ({ ...current, addressNickname: "Other" }));
+                        return;
+                      }
+                      const selected = savedAddresses.find((address) => address.id === nextId);
+                      if (selected) applySavedAddress(selected);
+                    }}
+                    className={inputClass}
+                  >
+                    <option value="other">Other address</option>
+                    {savedAddresses.map((address) => (
+                      <option key={address.id} value={address.id}>
+                        {address.nickname} - {address.address}, {address.city}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="sm:col-span-2">
+                  <input name="addressNickname" type="text" placeholder="Address nickname, e.g. Home, Work, Other" required value={formValues.addressNickname} onChange={(event) => setFormValue("addressNickname", event.target.value)} className={inputWithError("addressNickname")} />
+                  {fieldErrors.addressNickname && <p className={errorClass}>{fieldErrors.addressNickname}</p>}
+                </div>
                 <div>
-                  <input name="firstName" type="text" placeholder="First Name" autoComplete="given-name" minLength={2} required className={inputWithError("firstName")} />
+                  <input name="firstName" type="text" placeholder="First Name" autoComplete="given-name" minLength={2} required value={formValues.firstName} onChange={(event) => setFormValue("firstName", event.target.value)} className={inputWithError("firstName")} />
                   {fieldErrors.firstName && <p className={errorClass}>{fieldErrors.firstName}</p>}
                 </div>
                 <div>
-                  <input name="lastName" type="text" placeholder="Last Name" autoComplete="family-name" required className={inputWithError("lastName")} />
+                  <input name="lastName" type="text" placeholder="Last Name" autoComplete="family-name" required value={formValues.lastName} onChange={(event) => setFormValue("lastName", event.target.value)} className={inputWithError("lastName")} />
                   {fieldErrors.lastName && <p className={errorClass}>{fieldErrors.lastName}</p>}
                 </div>
                 <div className="sm:col-span-2">
-                  <input name="address" type="text" placeholder="Address" autoComplete="street-address" minLength={8} required className={inputWithError("address")} />
+                  <input name="address" type="text" placeholder="Address" autoComplete="street-address" minLength={8} required value={formValues.address} onChange={(event) => setFormValue("address", event.target.value)} className={inputWithError("address")} />
                   {fieldErrors.address && <p className={errorClass}>{fieldErrors.address}</p>}
                 </div>
                 <div>
-                  <input name="city" type="text" placeholder="City" autoComplete="address-level2" required className={inputWithError("city")} />
+                  <input name="city" type="text" placeholder="City" autoComplete="address-level2" required value={formValues.city} onChange={(event) => setFormValue("city", event.target.value)} className={inputWithError("city")} />
                   {fieldErrors.city && <p className={errorClass}>{fieldErrors.city}</p>}
                 </div>
                 <div className="flex gap-4">
                   <div className="w-1/2">
-                    <input name="state" type="text" placeholder="State" autoComplete="address-level1" required className={inputWithError("state")} />
+                    <input name="state" type="text" placeholder="State" autoComplete="address-level1" required value={formValues.state} onChange={(event) => setFormValue("state", event.target.value)} className={inputWithError("state")} />
                     {fieldErrors.state && <p className={errorClass}>{fieldErrors.state}</p>}
                   </div>
                   <div className="w-1/2">
-                    <input name="zip" type="text" placeholder="PIN Code" autoComplete="postal-code" inputMode="numeric" pattern="[0-9]{6}" maxLength={6} required className={inputWithError("zip")} />
+                    <input name="zip" type="text" placeholder="PIN Code" autoComplete="postal-code" inputMode="numeric" pattern="[0-9]{6}" maxLength={6} required value={formValues.zip} onChange={(event) => setFormValue("zip", event.target.value)} className={inputWithError("zip")} />
                     {fieldErrors.zip && <p className={errorClass}>{fieldErrors.zip}</p>}
                   </div>
                 </div>
+                {accountToken && selectedAddressId === "other" && (
+                  <label className="sm:col-span-2 flex items-center gap-3 text-[14px] text-[#5A5A55]">
+                    <input type="checkbox" checked={saveAddress} onChange={(event) => setSaveAddress(event.target.checked)} className="h-4 w-4" />
+                    Save this address to my account
+                  </label>
+                )}
               </div>
             </section>
 

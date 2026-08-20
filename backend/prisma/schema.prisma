@@ -30,6 +30,7 @@ model Order {
   customerFirstName String
   customerLastName  String
   customerAddress   String
+  addressNickname   String      @default("Other")
   customerCity      String
   customerState     String
   customerZip       String
@@ -54,6 +55,24 @@ model OrderItem {
 
   order   Order   @relation(fields: [orderId], references: [id], onDelete: Cascade)
   product Product @relation(fields: [productId], references: [id], onDelete: Restrict)
+}
+
+model SavedAddress {
+  id        String   @id @default(cuid())
+  email     String
+  nickname  String
+  firstName String
+  lastName  String
+  phone     String
+  address   String
+  city      String
+  state     String
+  zip       String
+  isDefault Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([email])
 }
 
 enum OrderStatus {

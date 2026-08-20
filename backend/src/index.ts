@@ -18,10 +18,39 @@ const GOKWIK_APP_ID = process.env.GOKWIK_APP_ID || '';
 const GOKWIK_APP_SECRET = process.env.GOKWIK_APP_SECRET || '';
 const RAZORPAY_KEY_ID = process.env.RAZORPAY_KEY_ID || '';
 const RAZORPAY_KEY_SECRET = process.env.RAZORPAY_KEY_SECRET || '';
+const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID || process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID || '';
+const SESSION_SECRET = process.env.SESSION_SECRET || RAZORPAY_KEY_SECRET || GOKWIK_APP_SECRET || 'totemood-dev-session-secret';
 const CHECKOUT_DEPOSIT_AMOUNT = 50;
+const defaultAllowedOrigins = [
+  'https://totemood.mywire.org',
+  'https://www.totemood.mywire.org',
+  'http://localhost:3000',
+  'http://localhost:3001',
+  'http://localhost:4010',
+];
+const allowedOrigins = new Set(
+  (process.env.CORS_ORIGINS || '')
+    .split(',')
+    .map((origin) => origin.trim())
+    .filter(Boolean)
+    .concat(defaultAllowedOrigins)
+);
+const corsOptions: cors.CorsOptions = {
+  origin(origin, callback) {
+    if (!origin || allowedOrigins.has(origin)) {
+      callback(null, true);
+      return;
+    }
+
+    callback(null, false);
+  },
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'gk-app-id', 'gk-app-secret', 'app-id', 'app-secret'],
+};
 
 // Middleware
-app.use(cors());
+app.use(cors(corsOptions));
 app.use(express.json({ limit: '50mb' }));
 
 // Log GoKwik incoming requests for debugging
@@ -38,10 +67,7 @@ const prisma = new PrismaClient();
 // Setup Socket.IO
 const httpServer = createServer(app);
 const io = new Server(httpServer, {
-  cors: {
-    origin: "*",
-    methods: ["GET", "POST", "PUT", "DELETE"]
-  }
+  cors: corsOptions
 });
 
 io.on("connection", (socket) => {
@@ -73,6 +99,9 @@ interface PendingCheckout {
   customerFirstName: string;
   customerLastName: string;
   customerAddress: string;
+  addressNickname: string;
+  saveAddress: boolean;
+  accountEmail: string | null;
   customerCity: string;
   customerState: string;
   customerZip: string;
@@ -86,6 +115,25 @@ interface PendingCheckout {
     customImageUrl: string | null;
   }>;
   createdAt: number;
+}
+
+interface AccountAddressInput {
+  email: string;
+  nickname: string;
+  firstName: string;
+  lastName: string;
+  phone: string;
+  address: string;
+  city: string;
+  state: string;
+  zip: string;
+  isDefault?: boolean;
+}
+
+interface AuthUser {
+  email: string;
+  name: string;
+  picture: string | undefined;
 }
 
 const pendingCheckouts = new Map<string, PendingCheckout>();
@@ -110,6 +158,80 @@ function normalizePhone(phone: unknown) {
   return String(phone || '').replace(/\D/g, '');
 }
 
+function normalizeEmail(email: unknown) {
+  return String(email || '').trim().toLowerCase();
+}
+
+function base64Url(input: string | Buffer) {
+  return Buffer.from(input).toString('base64url');
+}
+
+function signSession(user: AuthUser) {
+  const payload = base64Url(JSON.stringify({
+    email: normalizeEmail(user.email),
+    name: user.name,
+    picture: user.picture || '',
+    exp: Date.now() + 30 * 24 * 60 * 60 * 1000,
+  }));
+  const signature = crypto.createHmac('sha256', SESSION_SECRET).update(payload).digest('base64url');
+  return `${payload}.${signature}`;
+}
+
+function verifySessionToken(token: unknown): AuthUser | null {
+  const rawToken = String(token || '');
+  const [payload, signature] = rawToken.split('.');
+  if (!payload || !signature) return null;
+
+  const expectedSignature = crypto.createHmac('sha256', SESSION_SECRET).update(payload).digest('base64url');
+  if (signature.length !== expectedSignature.length) return null;
+  if (!crypto.timingSafeEqual(Buffer.from(signature), Buffer.from(expectedSignature))) return null;
+
+  try {
+    const data = JSON.parse(Buffer.from(payload, 'base64url').toString('utf8'));
+    if (!data.email || !data.exp || Date.now() > data.exp) return null;
+    return {
+      email: normalizeEmail(data.email),
+      name: String(data.name || ''),
+      picture: data.picture ? String(data.picture) : undefined,
+    };
+  } catch {
+    return null;
+  }
+}
+
+function getAuthUser(req: Request): AuthUser | null {
+  const header = req.headers.authorization || '';
+  const token = header.startsWith('Bearer ') ? header.slice(7) : '';
+  return verifySessionToken(token);
+}
+
+function requireAuthUser(req: Request, res: Response): AuthUser | null {
+  const user = getAuthUser(req);
+  if (!user) {
+    res.status(401).json({ error: 'Please sign in with Google first.' });
+    return null;
+  }
+  return user;
+}
+
+async function verifyGoogleCredential(credential: unknown): Promise<AuthUser> {
+  if (!GOOGLE_CLIENT_ID) {
+    throw new Error('Google login is not configured on the server.');
+  }
+
+  const tokenInfoRes = await fetch(`https://oauth2.googleapis.com/tokeninfo?id_token=${encodeURIComponent(String(credential || ''))}`);
+  const tokenInfo = await tokenInfoRes.json();
+  if (!tokenInfoRes.ok || tokenInfo.aud !== GOOGLE_CLIENT_ID || !tokenInfo.email) {
+    throw new Error('Google sign-in could not be verified.');
+  }
+
+  return {
+    email: normalizeEmail(tokenInfo.email),
+    name: String(tokenInfo.name || tokenInfo.email || ''),
+    picture: tokenInfo.picture ? String(tokenInfo.picture) : undefined,
+  };
+}
+
 function hasCheckoutImage(value: unknown) {
   const image = String(value || '').trim();
   return image.startsWith('data:image/') || image.startsWith('http://') || image.startsWith('https://');
@@ -132,6 +254,8 @@ function validateCustomer(data: any) {
     customerFirstName: String(data.customerFirstName || '').trim(),
     customerLastName: String(data.customerLastName || '').trim(),
     customerAddress: String(data.customerAddress || '').trim(),
+    addressNickname: String(data.addressNickname || data.nickname || 'Other').trim() || 'Other',
+    saveAddress: Boolean(data.saveAddress),
     customerCity: String(data.customerCity || '').trim(),
     customerState: String(data.customerState || '').trim(),
     customerZip: String(data.customerZip || '').trim(),
@@ -153,12 +277,73 @@ function validateCustomer(data: any) {
   return { customer, errors };
 }
 
+function validateAccountAddress(data: any): { address: AccountAddressInput; errors: Record<string, string> } {
+  const errors: Record<string, string> = {};
+  const address = {
+    email: normalizeEmail(data.email || data.customerEmail),
+    nickname: String(data.nickname || 'Other').trim() || 'Other',
+    firstName: String(data.firstName || data.customerFirstName || '').trim(),
+    lastName: String(data.lastName || data.customerLastName || '').trim(),
+    phone: normalizePhone(data.phone || data.customerPhone),
+    address: String(data.address || data.customerAddress || '').trim(),
+    city: String(data.city || data.customerCity || '').trim(),
+    state: String(data.state || data.customerState || '').trim(),
+    zip: String(data.zip || data.customerZip || '').trim(),
+    isDefault: Boolean(data.isDefault),
+  };
+
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(address.email)) errors.email = 'Enter a valid email address.';
+  if (address.nickname.length < 1) errors.nickname = 'Nickname is required.';
+  if (address.firstName.length < 2) errors.firstName = 'First name is required.';
+  if (address.lastName.length < 1) errors.lastName = 'Last name is required.';
+  if (!/^[6-9]\d{9}$/.test(address.phone)) errors.phone = 'Enter a valid 10 digit WhatsApp number.';
+  if (address.address.length < 8) errors.address = 'Enter a complete delivery address.';
+  if (address.city.length < 2) errors.city = 'City is required.';
+  if (address.state.length < 2) errors.state = 'State is required.';
+  if (!/^\d{6}$/.test(address.zip)) errors.zip = 'Enter a valid 6 digit PIN code.';
+
+  return { address, errors };
+}
+
+async function saveAccountAddress(data: any) {
+  const { address, errors } = validateAccountAddress(data);
+  if (Object.keys(errors).length > 0) {
+    const error = new Error('Address validation failed') as Error & { details?: Record<string, string> };
+    error.details = errors;
+    throw error;
+  }
+
+  return prisma.$transaction(async (tx) => {
+    if (address.isDefault) {
+      await tx.savedAddress.updateMany({
+        where: { email: address.email },
+        data: { isDefault: false },
+      });
+    }
+
+    const existingCount = await tx.savedAddress.count({ where: { email: address.email } });
+    return tx.savedAddress.create({
+      data: {
+        ...address,
+        isDefault: address.isDefault || existingCount === 0,
+      },
+    });
+  });
+}
+
 async function buildVerifiedCheckout(data: any): Promise<PendingCheckout> {
   const { customer, errors } = validateCustomer(data);
   const incomingItems = Array.isArray(data.items) ? data.items : [];
+  const accountUser = verifySessionToken(data.accountToken);
 
   if (incomingItems.length === 0) {
     errors.items = 'Your cart is empty.';
+  }
+  if (customer.saveAddress && !accountUser) {
+    errors.saveAddress = 'Please sign in with Google to save this address.';
+  }
+  if (accountUser && normalizeEmail(customer.customerEmail) !== accountUser.email) {
+    errors.customerEmail = 'Use your Google account email for checkout.';
   }
 
   const productIds = incomingItems.map((item: any) => String(item.productId || item.id || ''));
@@ -208,6 +393,7 @@ async function buildVerifiedCheckout(data: any): Promise<PendingCheckout> {
 
   return {
     ...customer,
+    accountEmail: accountUser?.email || null,
     subtotal,
     shipping,
     total: subtotal + shipping,
@@ -255,6 +441,7 @@ async function createOrderFromCheckout(checkout: PendingCheckout, razorpayPaymen
         customerFirstName: checkout.customerFirstName,
         customerLastName: checkout.customerLastName,
         customerAddress: checkout.customerAddress,
+        addressNickname: checkout.addressNickname,
         customerCity: checkout.customerCity,
         customerState: checkout.customerState,
         customerZip: checkout.customerZip,
@@ -317,6 +504,145 @@ function gokwikAuthMiddleware(req: Request, res: Response, next: NextFunction) {
 // Health Check
 app.get('/api/health', (_req, res) => {
   res.json({ status: 'ok' });
+});
+
+app.post('/api/auth/google', async (req, res) => {
+  try {
+    const user = await verifyGoogleCredential(req.body.credential);
+    const [firstName = '', ...lastNameParts] = user.name.split(' ');
+    res.json({
+      token: signSession(user),
+      user: {
+        email: user.email,
+        name: user.name,
+        picture: user.picture,
+        firstName,
+        lastName: lastNameParts.join(' '),
+        phone: '',
+      },
+    });
+  } catch (error: any) {
+    res.status(401).json({ error: error.message || 'Google sign-in failed.' });
+  }
+});
+
+app.get('/api/account/me', (req, res) => {
+  const user = requireAuthUser(req, res);
+  if (!user) return;
+  res.json({ user });
+});
+
+app.get('/api/account/orders', async (req, res) => {
+  try {
+    const user = requireAuthUser(req, res);
+    if (!user) return;
+
+    const orders = await prisma.order.findMany({
+      where: {
+        customerEmail: {
+          equals: user.email,
+          mode: 'insensitive',
+        },
+      },
+      include: {
+        items: {
+          include: { product: true },
+        },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    res.json(orders);
+  } catch (error) {
+    console.error('Failed to fetch account orders:', error);
+    res.status(500).json({ error: 'Failed to fetch account orders.' });
+  }
+});
+
+app.get('/api/account/addresses', async (req, res) => {
+  try {
+    const user = requireAuthUser(req, res);
+    if (!user) return;
+
+    const addresses = await prisma.savedAddress.findMany({
+      where: { email: user.email },
+      orderBy: [{ isDefault: 'desc' }, { updatedAt: 'desc' }],
+    });
+    res.json(addresses);
+  } catch (error) {
+    console.error('Failed to fetch saved addresses:', error);
+    res.status(500).json({ error: 'Failed to fetch saved addresses.' });
+  }
+});
+
+app.post('/api/account/addresses', async (req, res) => {
+  try {
+    const user = requireAuthUser(req, res);
+    if (!user) return;
+
+    const address = await saveAccountAddress({ ...req.body, email: user.email });
+    res.status(201).json(address);
+  } catch (error: any) {
+    if (error.details) {
+      return res.status(400).json({ error: 'Please correct the highlighted details.', details: error.details });
+    }
+    console.error('Failed to save address:', error);
+    res.status(500).json({ error: 'Failed to save address.' });
+  }
+});
+
+app.put('/api/account/addresses/:id', async (req, res) => {
+  try {
+    const user = requireAuthUser(req, res);
+    if (!user) return;
+
+    const { address, errors } = validateAccountAddress({ ...req.body, email: user.email });
+    if (Object.keys(errors).length > 0) {
+      return res.status(400).json({ error: 'Please correct the highlighted details.', details: errors });
+    }
+
+    const existing = await prisma.savedAddress.findUnique({ where: { id: req.params.id } });
+    if (!existing || existing.email !== user.email) {
+      return res.status(404).json({ error: 'Address not found.' });
+    }
+
+    const updated = await prisma.$transaction(async (tx) => {
+      if (address.isDefault) {
+        await tx.savedAddress.updateMany({
+          where: { email: address.email, id: { not: req.params.id } },
+          data: { isDefault: false },
+        });
+      }
+
+      return tx.savedAddress.update({
+        where: { id: req.params.id },
+        data: address,
+      });
+    });
+
+    res.json(updated);
+  } catch (error) {
+    console.error('Failed to update address:', error);
+    res.status(500).json({ error: 'Failed to update address.' });
+  }
+});
+
+app.delete('/api/account/addresses/:id', async (req, res) => {
+  try {
+    const user = requireAuthUser(req, res);
+    if (!user) return;
+
+    const existing = await prisma.savedAddress.findUnique({ where: { id: req.params.id } });
+    if (!existing || existing.email !== user.email) {
+      return res.status(404).json({ error: 'Address not found.' });
+    }
+
+    await prisma.savedAddress.delete({ where: { id: req.params.id } });
+    res.json({ success: true, id: req.params.id });
+  } catch (error) {
+    console.error('Failed to delete address:', error);
+    res.status(500).json({ error: 'Failed to delete address.' });
+  }
 });
 
 // --- Frontend Checkout Session Route ---
@@ -425,6 +751,23 @@ app.post('/api/checkout/verify-razorpay', async (req, res) => {
     }
 
     const order = await createOrderFromCheckout(checkout, razorpay_payment_id);
+    if (checkout.saveAddress) {
+      try {
+        await saveAccountAddress({
+          email: checkout.accountEmail || checkout.customerEmail,
+          nickname: checkout.addressNickname,
+          firstName: checkout.customerFirstName,
+          lastName: checkout.customerLastName,
+          phone: checkout.customerPhone,
+          address: checkout.customerAddress,
+          city: checkout.customerCity,
+          state: checkout.customerState,
+          zip: checkout.customerZip,
+        });
+      } catch (addressError) {
+        console.error('Order placed, but failed to save checkout address:', addressError);
+      }
+    }
     pendingCheckouts.delete(razorpay_order_id);
 
     res.status(201).json({
