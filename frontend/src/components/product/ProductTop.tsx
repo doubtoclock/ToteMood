@@ -4,17 +4,20 @@ import Image from "next/image";
 import { useState } from "react";
 import { Star, Shield, Truck, RotateCcw, Lock } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { Product } from "@/lib/data/products";
 import { useCartStore } from "@/lib/store/useCartStore";
+import { Product } from "@/lib/products";
 
 export function ProductTop({ product }: { product: Product }) {
   const router = useRouter();
   const addItem = useCartStore((state) => state.addItem);
 
-  const originalPrice = product.originalPrice || (product.price * 1.2);
+  const originalPrice = product.oldPrice || (product.price * 1.2);
   const savings = originalPrice - product.price;
 
-  const thumbnails = product.gallery || [
+  const rating = product.rating || 4.8;
+  const reviews = product.reviews || 128;
+
+  const thumbnails: string[] = product.gallery || [
     product.image,
     product.image,
     product.image,
@@ -84,11 +87,11 @@ export function ProductTop({ product }: { product: Product }) {
             <div className="flex items-center gap-3 mb-6">
               <div className="flex text-[#F5C518]">
                 {[...Array(5)].map((_, i) => (
-                  <Star key={i} className={`w-4 h-4 ${i < Math.floor(product.rating) ? 'fill-current' : ''}`} />
+                  <Star key={i} className={`w-4 h-4 ${i < Math.floor(rating) ? 'fill-current' : ''}`} />
                 ))}
               </div>
-              <span className="text-sm font-bold text-[#1C1C1A]">{product.rating}</span>
-              <span className="text-sm text-[#5A5A55]">{product.reviews} Reviews</span>
+              <span className="text-sm font-bold text-[#1C1C1A]">{rating}</span>
+              <span className="text-sm text-[#5A5A55]">{reviews} Reviews</span>
             </div>
 
             {/* Pricing */}

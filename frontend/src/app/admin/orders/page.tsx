@@ -5,6 +5,8 @@ import { Eye, Download, User, Phone, MapPin, PackageOpen, Trash2, Loader2 } from
 import Image from "next/image";
 import { io } from "socket.io-client";
 
+const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
+
 export default function AdminOrders() {
   const [orders, setOrders] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -14,10 +16,10 @@ export default function AdminOrders() {
 
   useEffect(() => {
     // Fetch initial orders
-    fetch('http://localhost:4000/api/orders')
+    fetch(`${API_URL}/api/orders`)
       .then(res => res.json())
       .then(data => {
-        setOrders(data);
+        setOrders(Array.isArray(data) ? data : data.orders ?? []);
         setLoading(false);
       })
       .catch(err => {
@@ -26,7 +28,7 @@ export default function AdminOrders() {
       });
 
     // Setup Socket.IO connection
-    const socket = io('http://localhost:4000');
+    const socket = io(API_URL);
 
     socket.on("new_order", (order) => {
       setOrders(prev => [order, ...prev]);
@@ -51,7 +53,7 @@ export default function AdminOrders() {
     if (!confirm("Are you sure you want to delete this order?")) return;
     setDeletingId(id);
     try {
-      await fetch(`http://localhost:4000/api/orders/${id}`, {
+      await fetch(`${API_URL}/api/orders/${id}`, {
         method: 'DELETE'
       });
       // UI updates automatically via WebSocket
@@ -65,7 +67,7 @@ export default function AdminOrders() {
   const handleUpdateStatus = async (id: string, newStatus: string) => {
     setUpdatingId(id);
     try {
-      await fetch(`http://localhost:4000/api/orders/${id}`, {
+      await fetch(`${API_URL}/api/orders/${id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ status: newStatus })

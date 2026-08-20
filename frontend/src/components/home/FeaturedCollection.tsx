@@ -1,16 +1,23 @@
 "use client";
 
-import React from "react";
+import React, { useState, useEffect } from "react";
 import Image from "next/image";
 import { motion } from "framer-motion";
 import Link from "next/link";
 import { AmbientGlow } from "@/components/ui/AmbientGlow";
-import { products } from "@/lib/data/products";
-
-// Get first 4 products for featured collection
-const featuredProducts = products.slice(0, 4);
+import { Product, normalizeProductsPayload } from "@/lib/products";
 
 export function FeaturedCollection() {
+  const [featuredProducts, setFeaturedProducts] = useState<Product[]>([]);
+
+  useEffect(() => {
+    const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
+    fetch(`${apiUrl}/api/products`)
+      .then(res => res.json())
+      .then(data => setFeaturedProducts(normalizeProductsPayload(data).slice(0, 4)))
+      .catch(err => console.error(err));
+  }, []);
+
   return (
     <section className="relative w-full py-24 lg:py-32 bg-[#EBE7DF] overflow-hidden">
       {/* Subtle Texture */}
@@ -110,8 +117,8 @@ export function FeaturedCollection() {
                     {product.name}
                   </h3>
                   <p className="text-sm font-medium text-[#1C1C1A] flex items-center gap-2">
-                    {product.originalPrice && (
-                      <span className="text-xs text-[#8C867C] line-through">₹{product.originalPrice.toFixed(2)}</span>
+                    {product.oldPrice && (
+                      <span className="text-xs text-[#8C867C] line-through">₹{product.oldPrice.toFixed(2)}</span>
                     )}
                     <span>₹{product.price.toFixed(2)}</span>
                   </p>

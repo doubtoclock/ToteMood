@@ -1,0 +1,21 @@
+services:
+  - type: web
+    name: totewood-backend
+    runtime: node
+    region: oregon
+    plan: free
+    buildCommand: npm install && npx prisma generate
+    startCommand: npx tsx src/index.ts
+    envVars:
+      - key: DATABASE_URL
+        sync: false
+      - key: GOKWIK_APP_ID
+        sync: false
+      - key: GOKWIK_APP_SECRET
+        sync: false
+      - key: GOKWIK_MERCHANT_ID
+        sync: false
+      - key: GOKWIK_ENV
+        value: sandbox
+      - key: PORT
+        value: 4000

@@ -1,9 +1,9 @@
 import Image from "next/image";
 import Link from "next/link";
 import { ArrowRight, ShoppingCart, Star } from "lucide-react";
-import { products } from "@/lib/data/products";
+import { Product } from "@/lib/products";
 
-export function ShopTrending() {
+export function ShopTrending({ products = [] }: { products?: Product[] }) {
   // Use the first 4 products as "Trending"
   const trendingProducts = products.slice(0, 4);
 

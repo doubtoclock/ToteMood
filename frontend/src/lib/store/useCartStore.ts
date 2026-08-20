@@ -1,8 +1,7 @@
 import { create } from 'zustand';
-import { Product } from '@/lib/data/products';
 
 export interface CartItem {
-  product: Product;
+  product: any;
   quantity: number;
   customImages?: (string | null)[]; // Array of Data URLs, length matches quantity
 }
@@ -12,7 +11,7 @@ interface CartStore {
   isOpen: boolean;
   
   // Actions
-  addItem: (product: Product, quantity?: number) => void;
+  addItem: (product: any, quantity?: number) => void;
   removeItem: (productId: string) => void;
   updateQuantity: (productId: string, quantity: number) => void;
   setCustomImage: (productId: string, imageIndex: number, imageStr: string) => void;

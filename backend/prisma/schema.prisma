@@ -5,7 +5,6 @@ generator client {
 datasource db {
   provider  = "postgresql"
   url       = env("DATABASE_URL")
-  directUrl = env("DIRECT_URL")
 }
 
 model Product {
@@ -25,6 +24,7 @@ model Product {
 
 model Order {
   id                String      @id @default(cuid())
+  gokwikOrderId     String?
   customerEmail     String
   customerPhone     String
   customerFirstName String

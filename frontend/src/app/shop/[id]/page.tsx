@@ -1,5 +1,4 @@
 import { notFound } from "next/navigation";
-import { products } from "@/lib/data/products";
 import { AmbientGlow } from "@/components/ui/AmbientGlow";
 import { ProductTop } from "@/components/product/ProductTop";
 import { ProductFeatures } from "@/components/product/ProductFeatures";
@@ -7,6 +6,7 @@ import { ProductReviews } from "@/components/product/ProductReviews";
 import { ProductFAQ } from "@/components/product/ProductFAQ";
 import { ProductRelated } from "@/components/product/ProductRelated";
 import { ScrollToTop } from "@/components/layout/ScrollToTop";
+import { fetchProduct } from "@/lib/products";
 
 interface PageProps {
   params: Promise<{
@@ -16,7 +16,13 @@ interface PageProps {
 
 export default async function ProductPage({ params }: PageProps) {
   const { id } = await params;
-  const product = products.find((p) => p.id === id);
+  
+  let product = null;
+  try {
+    product = await fetchProduct(id);
+  } catch (error) {
+    console.error("Failed to fetch product:", error);
+  }
 
   if (!product) {
     notFound();

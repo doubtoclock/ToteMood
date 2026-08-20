@@ -3,12 +3,16 @@
 import { useState, useEffect } from "react";
 import Image from "next/image";
 import { Plus, Edit2, Trash2, X, Upload } from "lucide-react";
+import { Product, normalizeProductsPayload } from "@/lib/products";
+
+const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
 
 export default function AdminProducts() {
-  const [products, setProducts] = useState<any[]>([]);
+  const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState("");
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [editingProduct, setEditingProduct] = useState<any | null>(null);
+  const [editingProduct, setEditingProduct] = useState<Product | null>(null);
 
   // Form State
   const [name, setName] = useState("");
@@ -22,14 +26,23 @@ export default function AdminProducts() {
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const fetchProducts = () => {
-    fetch('http://localhost:4000/api/products')
-      .then(res => res.json())
+    setLoadError("");
+    fetch(`${API_URL}/api/products`)
+      .then(async res => {
+        const data = await res.json();
+        if (!res.ok) {
+          throw new Error(data?.error || "Failed to fetch products");
+        }
+        return data;
+      })
       .then(data => {
-        setProducts(data);
+        setProducts(normalizeProductsPayload(data));
         setLoading(false);
       })
       .catch(err => {
         console.error(err);
+        setProducts([]);
+        setLoadError("Could not load products. Check that the backend database is connected.");
         setLoading(false);
       });
   };
@@ -51,7 +64,7 @@ export default function AdminProducts() {
     setIsModalOpen(true);
   };
 
-  const openEditModal = (product: any) => {
+  const openEditModal = (product: Product) => {
     setEditingProduct(product);
     setName(product.name);
     setDescription(product.description);
@@ -67,7 +80,7 @@ export default function AdminProducts() {
   const handleDelete = async (id: string) => {
     if (!confirm("Are you sure you want to delete this product?")) return;
     try {
-      const res = await fetch(`http://localhost:4000/api/products/${id}`, {
+      const res = await fetch(`${API_URL}/api/products/${id}`, {
         method: 'DELETE'
       });
       if (res.ok) {
@@ -97,8 +110,8 @@ export default function AdminProducts() {
 
     try {
       const url = editingProduct 
-        ? `http://localhost:4000/api/products/${editingProduct.id}`
-        : 'http://localhost:4000/api/products';
+        ? `${API_URL}/api/products/${editingProduct.id}`
+        : `${API_URL}/api/products`;
       
       const res = await fetch(url, {
         method: editingProduct ? 'PUT' : 'POST',
@@ -108,9 +121,13 @@ export default function AdminProducts() {
       if (res.ok) {
         setIsModalOpen(false);
         fetchProducts();
+      } else {
+        const data = await res.json().catch(() => null);
+        alert(data?.error || "Could not save product. Check the backend and try again.");
       }
     } catch (error) {
       console.error(error);
+      alert("Could not save product. Check the backend and try again.");
     } finally {
       setIsSubmitting(false);
     }
@@ -136,6 +153,11 @@ export default function AdminProducts() {
       </div>
 
       <div className="bg-white border border-[#1C1C1A]/10 rounded-2xl overflow-hidden shadow-sm">
+        {loadError && (
+          <div className="border-b border-red-200 bg-red-50 px-4 py-3 text-sm font-medium text-red-700">
+            {loadError}
+          </div>
+        )}
         <table className="w-full text-left border-collapse">
           <thead>
             <tr className="border-b border-[#1C1C1A]/10 bg-[#F8F6EF]/50">

@@ -1,9 +1,16 @@
 import Image from "next/image";
 import Link from "next/link";
 import { Star, ChevronLeft, ChevronRight } from "lucide-react";
-import { products, Product } from "@/lib/data/products";
+import { Product, fetchProducts } from "@/lib/products";
 
-export function ProductRelated({ currentProductId }: { currentProductId: string }) {
+export async function ProductRelated({ currentProductId }: { currentProductId: string }) {
+  let products: Product[] = [];
+  try {
+    products = await fetchProducts();
+  } catch (error) {
+    console.error("Failed to fetch related products:", error);
+  }
+
   // Get 3-4 related products (excluding current one)
   const relatedProducts = products.filter(p => p.id !== currentProductId).slice(0, 4);
 
@@ -25,7 +32,7 @@ export function ProductRelated({ currentProductId }: { currentProductId: string 
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 md:gap-8">
-          {relatedProducts.map((product: Product) => (
+          {relatedProducts.map((product) => (
             <Link 
               href={`/shop/${product.id}`} 
               key={product.id}
