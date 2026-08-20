@@ -4,6 +4,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import Link from "next/link";
 import { X } from "lucide-react";
 import { useEffect } from "react";
+import { usePathname } from "next/navigation";
 
 interface MobileMenuProps {
   isOpen: boolean;
@@ -11,6 +12,7 @@ interface MobileMenuProps {
 }
 
 export function MobileMenu({ isOpen, onClose }: MobileMenuProps) {
+  const pathname = usePathname();
   // Lock body scroll when menu is open
   useEffect(() => {
     if (isOpen) {

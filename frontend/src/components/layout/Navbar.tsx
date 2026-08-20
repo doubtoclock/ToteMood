@@ -3,7 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Search, User, ShoppingBag, Menu } from "lucide-react";
+import { User, ShoppingBag, Menu } from "lucide-react";
 import { motion, useScroll, useMotionValueEvent } from "framer-motion";
 import { MobileMenu } from "./MobileMenu";
 import { useCartStore } from "@/lib/store/useCartStore";
@@ -80,12 +80,6 @@ export function Navbar() {
 
           {/* Right: Actions */}
           <div className="flex-1 flex justify-end items-center space-x-5 lg:space-x-6">
-            <button 
-              aria-label="Search" 
-              className="text-primary hover:text-primary/70 transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary rounded-sm p-1"
-            >
-              <Search className="h-4 w-4" strokeWidth={1.5} />
-            </button>
             <Link 
               href="/account"
               aria-label="Account" 
