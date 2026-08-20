@@ -1,6 +1,3 @@
-ALTER TABLE "Order"
-ADD COLUMN "addressNickname" TEXT NOT NULL DEFAULT 'Other';
-
 CREATE TABLE "SavedAddress" (
   "id" TEXT NOT NULL,
   "email" TEXT NOT NULL,

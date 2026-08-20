@@ -30,7 +30,6 @@ model Order {
   customerFirstName String
   customerLastName  String
   customerAddress   String
-  addressNickname   String      @default("Other")
   customerCity      String
   customerState     String
   customerZip       String

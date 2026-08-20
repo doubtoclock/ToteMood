@@ -99,7 +99,6 @@ interface PendingCheckout {
   customerFirstName: string;
   customerLastName: string;
   customerAddress: string;
-  addressNickname: string;
   saveAddress: boolean;
   accountEmail: string | null;
   customerCity: string;
@@ -254,7 +253,6 @@ function validateCustomer(data: any) {
     customerFirstName: String(data.customerFirstName || '').trim(),
     customerLastName: String(data.customerLastName || '').trim(),
     customerAddress: String(data.customerAddress || '').trim(),
-    addressNickname: String(data.addressNickname || data.nickname || 'Other').trim() || 'Other',
     saveAddress: Boolean(data.saveAddress),
     customerCity: String(data.customerCity || '').trim(),
     customerState: String(data.customerState || '').trim(),
@@ -441,7 +439,6 @@ async function createOrderFromCheckout(checkout: PendingCheckout, razorpayPaymen
         customerFirstName: checkout.customerFirstName,
         customerLastName: checkout.customerLastName,
         customerAddress: checkout.customerAddress,
-        addressNickname: checkout.addressNickname,
         customerCity: checkout.customerCity,
         customerState: checkout.customerState,
         customerZip: checkout.customerZip,
@@ -755,7 +752,7 @@ app.post('/api/checkout/verify-razorpay', async (req, res) => {
       try {
         await saveAccountAddress({
           email: checkout.accountEmail || checkout.customerEmail,
-          nickname: checkout.addressNickname,
+          nickname: 'Home',
           firstName: checkout.customerFirstName,
           lastName: checkout.customerLastName,
           phone: checkout.customerPhone,

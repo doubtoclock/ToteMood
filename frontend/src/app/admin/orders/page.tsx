@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Eye, Download, User, Phone, MapPin, PackageOpen, Trash2, Loader2 } from "lucide-react";
+import { Eye, Download, User, Phone, MapPin, PackageOpen, Trash2, Loader2, FileSpreadsheet } from "lucide-react";
 import Image from "next/image";
 import { io } from "socket.io-client";
 import { apiFetch, SOCKET_URL } from "@/lib/api";
@@ -106,6 +106,38 @@ export default function AdminOrders() {
     }
   };
 
+  const handleExportCSV = () => {
+    const headers = ["Order ID", "Date", "Status", "First Name", "Last Name", "Email", "Phone", "Address", "City", "State", "Zip", "Subtotal", "Shipping", "Total", "Items", "Product Names"];
+    const rows = orders.map(order => [
+      order.id,
+      new Date(order.createdAt).toISOString(),
+      order.status,
+      order.customerFirstName,
+      order.customerLastName,
+      order.customerEmail,
+      order.customerPhone,
+      order.customerAddress,
+      order.customerCity,
+      order.customerState,
+      order.customerZip,
+      order.subtotal.toFixed(2),
+      order.shipping.toFixed(2),
+      order.total.toFixed(2),
+      order.items.length,
+      order.items.map(i => `${i.product?.name || 'Unknown'} x${i.quantity}`).join("; ")
+    ]);
+
+    const escape = (v: string) => `"${v.replace(/"/g, '""')}"`;
+    const csv = [headers.map(escape).join(","), ...rows.map(r => r.map(escape).join(","))].join("\n");
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `totemood-orders-${new Date().toISOString().split("T")[0]}.csv`;
+    link.click();
+    URL.revokeObjectURL(url);
+  };
+
   if (loading) {
     return <div className="p-8 text-[#5A5A55] flex items-center gap-2"><Loader2 className="w-4 h-4 animate-spin" /> Loading orders...</div>;
   }
@@ -117,6 +149,15 @@ export default function AdminOrders() {
           <h1 className="text-3xl font-serif text-[#1C1C1A]">Orders</h1>
           <p className="text-[#5A5A55] mt-2">Manage incoming orders, customer details, and custom image uploads.</p>
         </div>
+        {orders.length > 0 && (
+          <button
+            onClick={handleExportCSV}
+            className="flex items-center gap-2 bg-[#757D5C] text-white px-5 py-2.5 rounded-xl text-sm font-bold uppercase tracking-wider hover:bg-[#5C6348] transition-colors"
+          >
+            <FileSpreadsheet className="w-4 h-4" />
+            Download CSV
+          </button>
+        )}
       </div>
 
       <div className="bg-white border border-[#1C1C1A]/10 rounded-2xl overflow-hidden shadow-sm">

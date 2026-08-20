@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { LayoutDashboard, Package, ShoppingBag, Settings, LogOut, Lock } from "lucide-react";
+import { LayoutDashboard, Package, ShoppingBag, LogOut, Lock } from "lucide-react";
 
 export default function AdminLayout({
   children,
@@ -45,7 +45,6 @@ export default function AdminLayout({
     { name: "Dashboard", href: "/admin", icon: LayoutDashboard },
     { name: "Products", href: "/admin/products", icon: Package },
     { name: "Orders", href: "/admin/orders", icon: ShoppingBag },
-    { name: "Settings", href: "/admin/settings", icon: Settings },
   ];
 
   // Still checking auth state
