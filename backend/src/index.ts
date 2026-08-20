@@ -364,7 +364,84 @@ app.post('/gokwik/v1/cart/update-order-status', gokwikAuthMiddleware, async (req
   }
 });
 
-// 9. Health Check for GoKwik
+// 9. Payment Notification Webhook - GoKwik sends payment status updates here after payment
+app.post('/gokwik/v1/payment-notification', gokwikAuthMiddleware, async (req: Request, res: Response) => {
+  try {
+    console.log('[GoKwik] Payment notification received:', JSON.stringify(req.body).slice(0, 500));
+
+    const {
+      gokwik_order_id,
+      merchant_order_id,
+      order_id,
+      payment_status,
+      payment_method,
+      transaction_id,
+      amount,
+      status,
+    } = req.body;
+
+    const orderId = merchant_order_id || order_id;
+    const gokwikId = gokwik_order_id;
+    const paymentStatus = (payment_status || status || '').toString().toLowerCase();
+
+    if (!orderId && !gokwikId) {
+      console.error('[GoKwik] Payment notification: no order identifier provided');
+      return res.status(400).json({ message: 'order_id or gokwik_order_id is required' });
+    }
+
+    // Find the order
+    const order = await prisma.order.findFirst({
+      where: {
+        OR: [
+          orderId ? { id: orderId } : { id: '__none__' },
+          gokwikId ? { gokwikOrderId: gokwikId } : { id: '__none__' },
+        ],
+      },
+    });
+
+    if (!order) {
+      console.error('[GoKwik] Payment notification: order not found for', { orderId, gokwikId });
+      return res.status(404).json({ message: 'Order not found' });
+    }
+
+    // Map GoKwik payment statuses to our OrderStatus
+    const statusMap: Record<string, string> = {
+      'success': 'PROCESSING',
+      'completed': 'PROCESSING',
+      'paid': 'PROCESSING',
+      'captured': 'PROCESSING',
+      'pending': 'PENDING',
+      'processing': 'PROCESSING',
+      'failed': 'CANCELLED',
+      'cancelled': 'CANCELLED',
+      'canceled': 'CANCELLED',
+      'refunded': 'CANCELLED',
+      'expired': 'CANCELLED',
+    };
+
+    const mappedStatus = statusMap[paymentStatus] || order.status;
+
+    const updatedOrder = await prisma.order.update({
+      where: { id: order.id },
+      data: {
+        status: mappedStatus as any,
+        gokwikOrderId: order.gokwikOrderId || gokwikId || undefined,
+      },
+      include: { items: { include: { product: true } } },
+    });
+
+    io.emit('order_updated', updatedOrder);
+
+    console.log(`[GoKwik] Payment notification processed: order ${order.id} -> ${mappedStatus}`);
+
+    res.json({ status: 'success', order_id: order.id });
+  } catch (error) {
+    console.error('[GoKwik] Payment notification error:', error);
+    res.status(500).json({ message: 'Internal server error' });
+  }
+});
+
+// 10. Health Check for GoKwik
 app.post('/gokwik/v1/cart/health-check', gokwikAuthMiddleware, (_req, res) => {
   res.json({ status: 'ok' });
 });
