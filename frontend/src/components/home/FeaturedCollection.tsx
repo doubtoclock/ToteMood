@@ -51,7 +51,7 @@ export function FeaturedCollection() {
               Carry a little something with you.
             </h2>
             <p className="text-lg text-[#5A5A55]">
-              Made for the moments you never want to leave behind.
+              Let's customize your tote bag with your personalized image and text.
             </p>
           </div>
           <Link

@@ -40,7 +40,7 @@ export function ProductReviews() {
               Customer Reviews
             </h2>
             <div className="flex items-center gap-2">
-              <div className="flex text-[#D94F3C]">
+              <div className="flex text-[#b06161]">
                 {[...Array(5)].map((_, i) => (
                   <Star key={i} className="w-[16px] h-[16px] fill-current" strokeWidth={0} />
                 ))}
@@ -49,9 +49,6 @@ export function ProductReviews() {
               <span className="text-[14px] text-[#8C867C]">(128 reviews)</span>
             </div>
           </div>
-          <button className="text-[13px] font-bold uppercase tracking-widest text-[#252A1A] border-b border-[#252A1A] pb-0.5 hover:text-[#686B59] hover:border-[#686B59] transition-colors self-start md:self-end">
-            Write a review
-          </button>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
@@ -60,7 +57,7 @@ export function ProductReviews() {
               key={review.id} 
               className="bg-[#FAF9F8] rounded-[20px] p-8 border border-[#E8E5DC]"
             >
-              <div className="flex items-center gap-1 text-[#D94F3C] mb-4">
+              <div className="flex items-center gap-1 text-[#b06161] mb-4">
                 {[...Array(5)].map((_, i) => (
                   <Star key={i} className={`w-[14px] h-[14px] ${i < review.rating ? 'fill-current' : 'fill-transparent stroke-current'}`} strokeWidth={i < review.rating ? 0 : 1.5} />
                 ))}

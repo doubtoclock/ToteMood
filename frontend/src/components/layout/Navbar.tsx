@@ -27,7 +27,7 @@ export function Navbar() {
   return (
     <>
       <motion.header
-        className={`fixed left-0 right-0 z-50 transition-all duration-500 flex justify-center ${
+        className={`sticky left-0 right-0 z-50 transition-all duration-500 flex justify-center ${
           isScrolled ? "top-4 px-4" : "top-0"
         }`}
       >

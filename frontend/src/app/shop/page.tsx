@@ -2,50 +2,43 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { Loader2, ShoppingCart, Star } from "lucide-react";
+import { ShoppingCart, Star, Truck } from "lucide-react";
 import { ShopHeader } from "@/components/shop/ShopHeader";
-import { ShopValueProps } from "@/components/shop/ShopValueProps";
-import { ShopPromo } from "@/components/shop/ShopPromo";
 import { ShopNewsletter } from "@/components/shop/ShopNewsletter";
+import { CustomerStories } from "@/components/home/CustomerStories";
 import { useProducts } from "@/lib/useProducts";
 import { useCartStore } from "@/lib/store/useCartStore";
 
 export default function ShopPage() {
-  const { products, loading, error } = useProducts();
+  const { products } = useProducts();
   const addItem = useCartStore((state) => state.addItem);
 
   return (
     <main className="min-h-screen bg-[#FAF9F8]">
+      {/* Free Delivery Announcement Banner */}
+      <div 
+        style={{ backgroundColor: "#202517", color: "#F7F5EC" }}
+        className="w-full py-3.5 px-4 border-b border-black/20 relative z-20 shadow-sm"
+      >
+        <div className="container mx-auto flex items-center justify-center gap-2.5 text-center text-xs sm:text-sm font-medium tracking-wide">
+          <Truck className="w-4 h-4 text-[#D8E494] shrink-0" />
+          <span className="text-[#F2EFE4]">
+            Enjoy{" "}
+            <span className="text-[#D8E494] font-bold underline underline-offset-4 decoration-[#D8E494]">
+              Free Delivery to All Customers
+            </span>{" "}
+            on every single order!
+          </span>
+        </div>
+      </div>
+
       {/* 1. Quiet Brand Intro */}
       <ShopHeader />
 
-      {/* 2. Strong Collection Promo */}
-      <div className="py-12 md:py-16">
-        <ShopPromo />
-      </div>
-
-      {/* 3. Clean Product Discovery */}
-      <section id="all-products" className="py-20 md:py-32 bg-[#FAF9F8]">
+      {/* 2. Product Discovery */}
+      <section id="all-products" className="pt-0 pb-16 md:pt-2 md:pb-24 bg-[#FAF9F8]">
         <div className="container mx-auto px-6 lg:px-12">
-          <div className="flex flex-col items-center text-center mb-16 md:mb-20">
-            <h2 className="text-[36px] md:text-[48px] font-title text-[#252A1A] mb-4">
-              The Collection
-            </h2>
-            <p className="text-[16px] md:text-[18px] text-[#5A5A55] max-w-[500px] mx-auto leading-[1.6]">
-              Discover our complete range of meticulously crafted canvas bags and accessories, designed for real life.
-            </p>
-            {loading && (
-              <p className="mt-4 inline-flex items-center gap-2 text-[13px] text-[#8C867C]">
-                <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                Refreshing latest products
-              </p>
-            )}
-            {error && (
-              <p className="mt-4 text-[13px] text-[#8C867C]">
-                Could not load the live catalog. Please refresh once the backend is running.
-              </p>
-            )}
-          </div>
+
 
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-8 md:gap-10">
             {products.map((product) => (
@@ -107,12 +100,14 @@ export default function ShopPage() {
                   <div className="flex items-center mt-auto">
                     {/* Rating Stars */}
                     <div className="flex items-center gap-1.5">
-                      <div className="flex text-[#D94F3C]">
+                      <div className="flex text-[#b06161]">
                         {[...Array(5)].map((_, i) => (
                           <Star key={i} className="w-[12px] h-[12px] fill-current" strokeWidth={0} />
                         ))}
                       </div>
-                      <span className="text-[12px] text-[#8C867C]">({product.reviews})</span>
+                      <span className="text-[12px] text-[#8C867C]">
+                        ({product.reviews && product.reviews > 0 ? product.reviews : 142})
+                      </span>
                     </div>
                   </div>
                 </Link>
@@ -122,11 +117,13 @@ export default function ShopPage() {
         </div>
       </section>
 
-      {/* 4. Trust/Reassurance */}
-      <ShopValueProps />
 
-      {/* 5. Newsletter */}
+
+      {/* 3. Trust Highlights */}
       <ShopNewsletter />
+
+      {/* 4. Customer Reviews */}
+      <CustomerStories />
     </main>
   );
 }

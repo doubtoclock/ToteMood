@@ -5,6 +5,7 @@ export interface CartItem {
   product: Product;
   quantity: number;
   customImages?: (string | null)[]; // Array of Data URLs, length matches quantity
+  customTexts?: (string | null)[]; // Array of custom text strings, length matches quantity
 }
 
 interface CartStore {
@@ -16,6 +17,7 @@ interface CartStore {
   removeItem: (productId: string) => void;
   updateQuantity: (productId: string, quantity: number) => void;
   setCustomImage: (productId: string, imageIndex: number, imageStr: string) => void;
+  setCustomText: (productId: string, textIndex: number, text: string) => void;
   syncProducts: (products: Product[]) => void;
   clearCart: () => void;
   
@@ -43,11 +45,13 @@ export const useCartStore = create<CartStore>((set, get) => ({
             if (item.product.id === product.id) {
               const newQuantity = item.quantity + quantity;
               const newCustomImages = item.customImages ? [...item.customImages] : Array(item.quantity).fill(null);
+              const newCustomTexts = item.customTexts ? [...item.customTexts] : Array(item.quantity).fill(null);
               // Append new nulls for the added quantity
               for (let i = 0; i < quantity; i++) {
                 newCustomImages.push(null);
+                newCustomTexts.push(null);
               }
-              return { ...item, quantity: newQuantity, customImages: newCustomImages };
+              return { ...item, quantity: newQuantity, customImages: newCustomImages, customTexts: newCustomTexts };
             }
             return item;
           }),
@@ -56,7 +60,15 @@ export const useCartStore = create<CartStore>((set, get) => ({
       }
       
       return { 
-        items: [...state.items, { product, quantity, customImages: Array(quantity).fill(null) }],
+        items: [
+          ...state.items, 
+          { 
+            product, 
+            quantity, 
+            customImages: Array(quantity).fill(null),
+            customTexts: Array(quantity).fill(null),
+          }
+        ],
         isOpen: true 
       };
     });
@@ -74,17 +86,22 @@ export const useCartStore = create<CartStore>((set, get) => ({
         if (item.product.id === productId) {
           const newQty = Math.max(1, quantity);
           let newCustomImages = item.customImages ? [...item.customImages] : Array(item.quantity).fill(null);
+          let newCustomTexts = item.customTexts ? [...item.customTexts] : Array(item.quantity).fill(null);
           
           if (newQty > newCustomImages.length) {
             // pad with nulls
             const diff = newQty - newCustomImages.length;
-            for (let i = 0; i < diff; i++) newCustomImages.push(null);
+            for (let i = 0; i < diff; i++) {
+              newCustomImages.push(null);
+              newCustomTexts.push(null);
+            }
           } else if (newQty < newCustomImages.length) {
             // truncate
             newCustomImages = newCustomImages.slice(0, newQty);
+            newCustomTexts = newCustomTexts.slice(0, newQty);
           }
           
-          return { ...item, quantity: newQty, customImages: newCustomImages };
+          return { ...item, quantity: newQty, customImages: newCustomImages, customTexts: newCustomTexts };
         }
         return item;
       })
@@ -98,6 +115,19 @@ export const useCartStore = create<CartStore>((set, get) => ({
           const newImages = item.customImages ? [...item.customImages] : Array(item.quantity).fill(null);
           newImages[imageIndex] = imageStr;
           return { ...item, customImages: newImages };
+        }
+        return item;
+      })
+    }));
+  },
+
+  setCustomText: (productId, textIndex, text) => {
+    set((state) => ({
+      items: state.items.map(item => {
+        if (item.product.id === productId) {
+          const newTexts = item.customTexts ? [...item.customTexts] : Array(item.quantity).fill(null);
+          newTexts[textIndex] = text;
+          return { ...item, customTexts: newTexts };
         }
         return item;
       })

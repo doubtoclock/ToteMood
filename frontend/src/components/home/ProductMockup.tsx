@@ -73,8 +73,7 @@ export function ProductMockup() {
           </div>
           <div className="flex gap-6 text-xs uppercase tracking-[0.15em] font-medium text-primary/90">
             <a href="#" className="hover:text-primary transition-colors">Instagram</a>
-            <a href="#" className="hover:text-primary transition-colors">TikTok</a>
-            <a href="#" className="hover:text-primary transition-colors">Pinterest</a>
+
           </div>
           <div className="text-[10px] uppercase tracking-widest text-primary/60 mt-4">
             © {new Date().getFullYear()} Totemood. All rights reserved.
@@ -155,8 +154,7 @@ export function ProductMockup() {
 
           <div className="flex gap-8 text-sm uppercase tracking-[0.15em] font-medium text-primary/90">
             <a href="#" className="hover:text-primary transition-colors">Instagram</a>
-            <a href="#" className="hover:text-primary transition-colors">TikTok</a>
-            <a href="#" className="hover:text-primary transition-colors">Pinterest</a>
+
           </div>
 
           <div className="text-xs uppercase tracking-widest text-primary/60">

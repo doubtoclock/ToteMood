@@ -16,7 +16,7 @@ declare global {
   }
 }
 
-const DEPOSIT_AMOUNT = 50;
+const DEPOSIT_AMOUNT = 49;
 const VERIFY_RETRY_DELAYS_MS = [1000, 2000];
 
 interface RazorpayPaymentResponse {
@@ -39,7 +39,7 @@ const emptyCheckoutForm = {
 };
 
 export default function CheckoutPage() {
-  const { items, getTotal, setCustomImage, clearCart, syncProducts } = useCartStore();
+  const { items, getTotal, setCustomImage, setCustomText, clearCart, syncProducts } = useCartStore();
   const { products: liveProducts } = useProducts();
   const fileInputRef = useRef<HTMLInputElement>(null);
   
@@ -187,8 +187,8 @@ export default function CheckoutPage() {
     const missingImages = missingArtworkCount();
     if (missingImages > 0) {
       const message = missingImages === 1
-        ? "Please upload artwork for your custom tote before payment."
-        : `Please upload artwork for all ${missingImages} custom totes before payment.`;
+        ? "Please upload an image for your custom tote before payment."
+        : `Please upload images for all ${missingImages} custom totes before payment.`;
       setFieldErrors({ items: message });
       setCheckoutError(message);
       return;
@@ -242,7 +242,7 @@ export default function CheckoutPage() {
           amount: DEPOSIT_AMOUNT * 100,
           currency: paymentOrder.currency,
           name: "ToteMood",
-          description: "₹50 advance. Remaining amount is cash on delivery.",
+          description: "₹49 advance. Remaining amount is cash on delivery.",
           order_id: paymentOrder.razorpayOrderId,
           prefill: {
             name: `${formValues.firstName} ${formValues.lastName}`,
@@ -290,7 +290,7 @@ export default function CheckoutPage() {
           <CheckCircle2 className="w-16 h-16 text-[#8E9476] mx-auto mb-6" strokeWidth={1.5} />
           <h1 className="text-[32px] font-title text-[#252A1A] mb-4">Order Confirmed</h1>
           <p className="text-[#686B59] mb-10 leading-[1.6]">
-            Thank you! We received your ₹50 advance payment. The remaining amount is cash on delivery, and your example Ghibli image will be sent over your WhatsApp number.
+            Thank you! We received your ₹49 advance payment. The remaining amount is cash on delivery, and your example Ghibli image will be sent over your WhatsApp number.
           </p>
           {confirmedOrderId && (
             <p className="text-[12px] font-bold uppercase tracking-widest text-[#8C867C] mb-6">
@@ -448,7 +448,7 @@ export default function CheckoutPage() {
                     <WalletCards className="h-5 w-5" />
                   </div>
                   <div>
-                    <p className="text-[15px] font-bold text-[#252A1A]">Pay only ₹50 now</p>
+                    <p className="text-[15px] font-bold text-[#252A1A]">Pay only ₹49 now</p>
                     <p className="text-[13px] text-[#686B59] leading-[1.6] mt-1">
                       The remaining ₹{codBalance.toFixed(2)} is cash on delivery. Your example Ghibli image will be sent over your WhatsApp number before dispatch.
                     </p>
@@ -491,14 +491,21 @@ export default function CheckoutPage() {
                       </div>
                     </div>
 
-                    {/* Premium Image Upload Module */}
+                    {/* Premium Image Upload & Custom Text Module */}
                     {item.product.isCustomizable && (
                       <div className="flex flex-col gap-3">
                         {Array.from({ length: item.quantity }).map((_, idx) => {
                           const uploadedImage = item.customImages?.[idx];
                           const showImageError = Boolean(fieldErrors.items && !uploadedImage);
+                          const isTextProduct = 
+                            item.product.name.toLowerCase().includes("text") ||
+                            item.product.name.toLowerCase().includes("emoji") ||
+                            item.product.id.includes("text") ||
+                            item.product.id.includes("emoji") ||
+                            item.product.description.toLowerCase().includes("text");
+
                           return (
-                            <div key={idx}>
+                            <div key={idx} className="flex flex-col gap-2">
                               {uploadedImage ? (
                                 <div className="bg-[#FAF9F8] rounded-[12px] p-4 border border-[#E8E5DC] flex items-center justify-between">
                                   <div className="flex items-center gap-3">
@@ -508,7 +515,7 @@ export default function CheckoutPage() {
                                     <div className="flex flex-col">
                                       <span className="text-[13px] font-medium text-[#252A1A] flex items-center gap-1.5">
                                         <CheckCircle2 className="w-3.5 h-3.5 text-[#8E9476]" /> 
-                                        Artwork attached
+                                        Image attached
                                       </span>
                                     </div>
                                   </div>
@@ -534,10 +541,29 @@ export default function CheckoutPage() {
                                 >
                                   <div className="flex items-center gap-2 mb-1.5">
                                     <Upload className="w-[14px] h-[14px] text-[#8C867C]" strokeWidth={2} />
-                                    <span className="text-[13px] font-bold text-[#252A1A]">Upload your artwork</span>
+                                    <span className="text-[13px] font-bold text-[#252A1A]">Upload your image</span>
                                   </div>
                                   <span className="text-[11px] text-[#8C867C]">PNG or JPG &middot; Max 10MB</span>
                                 </button>
+                              )}
+
+                              {/* Custom Text Input for Products with Text */}
+                              {isTextProduct && (
+                                <div className="bg-[#FAF9F8] p-3.5 rounded-[12px] border border-[#E8E5DC]">
+                                  <div className="flex items-center justify-between mb-1.5">
+                                    <label className="block text-[11px] font-bold uppercase tracking-wider text-[#252A1A]">
+                                      Custom Text / Message
+                                    </label>
+                                    <span className="text-[10px] text-[#8C867C]">e.g. Names, Date, Quote</span>
+                                  </div>
+                                  <input
+                                    type="text"
+                                    value={item.customTexts?.[idx] || ""}
+                                    onChange={(e) => setCustomText(item.product.id, idx, e.target.value)}
+                                    placeholder="Enter your custom text here..."
+                                    className="w-full h-10 px-3.5 bg-white border border-[#E8E5DC] rounded-[8px] text-[13px] text-[#252A1A] placeholder:text-[#8C867C] focus:outline-none focus:border-[#8E9476] transition-colors"
+                                  />
+                                </div>
                               )}
                             </div>
                           );
@@ -591,7 +617,7 @@ export default function CheckoutPage() {
                     <Loader2 className="w-4 h-4 animate-spin" />
                   ) : (
                     <>
-                      Pay ₹50 advance
+                      Pay ₹49 advance
                       <span className="transform group-hover:translate-x-1 transition-transform">&rarr;</span>
                     </>
                   )}
@@ -603,7 +629,7 @@ export default function CheckoutPage() {
                 )}
                 <div className="flex items-center justify-center gap-1.5 text-[#8C867C]">
                   <Lock className="w-[12px] h-[12px]" strokeWidth={2} />
-                  <span className="text-[11px] font-medium">₹50 online now &middot; rest payable by COD</span>
+                  <span className="text-[11px] font-medium">₹49 online now &middot; rest payable by COD</span>
                 </div>
               </div>
 

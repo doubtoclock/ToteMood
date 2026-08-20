@@ -53,11 +53,11 @@ export function CustomerStories() {
       
       <div className="container mx-auto px-4 md:px-6 lg:px-12 relative z-10">
         <div className="flex flex-col md:flex-row justify-between items-end mb-12 md:mb-16 gap-6">
-          <div className="max-w-xl text-center md:text-left mx-auto md:mx-0">
-            <h2 className="text-4xl md:text-5xl lg:text-[56px] font-serif text-[#1C1C1A] leading-[1.1] tracking-tight mb-4">
-              Real Stories.
+          <div className="max-w-2xl text-center md:text-left mx-auto md:mx-0">
+            <h2 className="text-3xl sm:text-4xl md:text-5xl lg:text-[56px] font-serif text-[#1C1C1A] leading-[1.15] tracking-tight mb-4">
+              Honest Customer Reviews
               <br />
-              <span className="text-[#8E9476] italic">Real People.</span>
+              <span className="text-[#b06161] italic">from Totemood.</span>
             </h2>
             <p className="text-[#5A5A55] text-lg">
               See what our community is saying about their Totemood experience.

@@ -74,9 +74,9 @@ export function Hero() {
             transition={{ duration: 0.8, ease: [0.16, 1, 0.3, 1], delay: 0.2 }}
             className="font-heading text-[50px] sm:text-[70px] md:text-[90px] lg:text-[110px] xl:text-[120px] leading-[0.85] tracking-tight text-foreground"
           >
-            Carry your
+            Bags that
             <br />
-            mood.
+            speak.
           </motion.h1>
 
           <motion.p
@@ -85,32 +85,10 @@ export function Hero() {
             transition={{ duration: 0.8, ease: [0.16, 1, 0.3, 1], delay: 0.4 }}
             className="mt-8 md:mt-12 text-lg md:text-xl text-foreground/80 font-sans leading-relaxed max-w-[440px]"
           >
-            Made for slow mornings, creative afternoons, and the little moments
-            you carry every day.
+            Customize your best memories into your gift which you can gift to your friends, partner, family.
           </motion.p>
 
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.8, ease: [0.16, 1, 0.3, 1], delay: 0.6 }}
-            className="mt-10 md:mt-20 flex flex-wrap gap-6 items-center"
-          >
-            <Button
-              size="lg"
-              render={<Link href="/shop" />}
-              nativeButton={false}
-              className="rounded-full px-8 text-sm uppercase tracking-widest font-medium h-14 bg-primary text-primary-foreground hover:bg-primary-hover shadow-none transition-all duration-300 hover:-translate-y-1"
-            >
-              Explore Collection
-            </Button>
-            <Button
-              size="lg"
-              variant="outline"
-              className="rounded-full px-6 text-sm uppercase tracking-widest font-medium h-14 bg-white/60 backdrop-blur-md border-primary/10 text-foreground hover:bg-white/90 hover:text-foreground/80 transition-colors duration-300 shadow-[0_4px_20px_-8px_rgba(0,0,0,0.1)]"
-            >
-              Our Story
-            </Button>
-          </motion.div>
+
         </motion.div>
       </Container>
 

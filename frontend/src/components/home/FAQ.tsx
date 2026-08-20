@@ -23,9 +23,9 @@ const faqs = [
       "Our products are custom-made for you, we don't offer full COD. A small advance confirms your order and allows us to create and share the design for approval. The balance is paid on the delivery.",
   },
   {
-    question: "Why do I need to pay ₹50 while placing the order?",
+    question: "Why do I need to pay ₹49 while placing the order?",
     answer:
-      "We take a ₹50 advance because this is a custom-made product. It confirms your order and allows us to create and share the design on WhatsApp for approval. The amount is minus in the final payment that you can pay on delivery.",
+      "We take a ₹49 advance because this is a custom-made product. It confirms your order and allows us to create and share the design on WhatsApp for approval. The amount is minus in the final payment that you can pay on delivery.",
   },
   {
     question: "Is there any return policy?",
@@ -74,9 +74,7 @@ export function FAQ() {
             <h2 className="text-3xl md:text-5xl lg:text-6xl font-heading text-primary leading-[1.1] tracking-tight mb-6">
               Everything you might want to know.
             </h2>
-            <p className="text-lg text-primary/80">
-              A few answers before you carry it home.
-            </p>
+
           </div>
 
           {/* Right Column: Accordion */}

@@ -20,7 +20,7 @@ const RAZORPAY_KEY_ID = process.env.RAZORPAY_KEY_ID || '';
 const RAZORPAY_KEY_SECRET = process.env.RAZORPAY_KEY_SECRET || '';
 const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID || process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID || '';
 const SESSION_SECRET = process.env.SESSION_SECRET || RAZORPAY_KEY_SECRET || GOKWIK_APP_SECRET || 'totemood-dev-session-secret';
-const CHECKOUT_DEPOSIT_AMOUNT = 50;
+const CHECKOUT_DEPOSIT_AMOUNT = 49;
 const defaultAllowedOrigins = [
   'https://totemood.mywire.org',
   'https://www.totemood.mywire.org',

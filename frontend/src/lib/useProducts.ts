@@ -2,18 +2,46 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { io } from "socket.io-client";
-import { Product } from "@/lib/data/products";
+import { Product, products as staticProducts } from "@/lib/data/products";
 import { apiFetch, SOCKET_URL } from "@/lib/api";
+
+function getProductGallery(product: Product): string[] {
+  if (product.gallery && product.gallery.length > 1) {
+    return product.gallery;
+  }
+  const match = staticProducts.find(
+    (p) => p.id === product.id || p.name.toLowerCase() === product.name?.toLowerCase()
+  );
+  if (match?.gallery && match.gallery.length > 0) {
+    return match.gallery;
+  }
+  const image = product.image || "";
+  const matchW = image.match(/W(\d+)\.png/i);
+  if (matchW) {
+    const num = parseInt(matchW[1], 10);
+    const baseGroup = Math.floor((num - 1) / 4) * 4 + 1;
+    return [
+      `/images/product/W${baseGroup}.png`,
+      `/images/product/W${baseGroup + 1}.png`,
+      `/images/product/W${baseGroup + 2}.png`,
+      `/images/product/W${baseGroup + 3}.png`,
+    ];
+  }
+  return [image];
+}
 
 function normalizeProduct(product: Product): Product {
   const oldPrice = product.oldPrice ?? product.originalPrice ?? null;
+  const match = staticProducts.find(
+    (p) => p.id === product.id || p.name.toLowerCase() === product.name?.toLowerCase()
+  );
   return {
     ...product,
     oldPrice,
     originalPrice: oldPrice ?? undefined,
-    rating: product.rating ?? 4.8,
-    reviews: product.reviews ?? 0,
-    gallery: product.gallery?.length ? product.gallery : [product.image],
+    rating: product.rating ?? match?.rating ?? 4.8,
+    reviews: product.reviews ?? match?.reviews ?? 120,
+    gallery: getProductGallery(product),
   };
 }
 
