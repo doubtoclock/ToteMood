@@ -6,3 +6,7 @@ backend/.env
 frontend/.env
 .DS_Store
 frontend/frontend/
+# playwright artifacts
+frontend/test-results/
+backend/test-results/
+playwright-report/
