@@ -1,10 +1,11 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Image from "next/image";
 import { Section } from "@/components/layout/Section";
 import { AmbientGlow } from "@/components/ui/AmbientGlow";
 import { apiFetch } from "@/lib/api";
+import { loadGoogleIdentity, renderGoogleSignInButton } from "@/lib/googleSignIn";
 import {
   AccountProfile,
   AccountSession,
@@ -19,19 +20,6 @@ import {
 import { MapPin, Package, Plus, Trash2, User } from "lucide-react";
 
 type AccountTab = "details" | "orders" | "addresses";
-
-declare global {
-  interface Window {
-    google?: {
-      accounts: {
-        id: {
-          initialize: (options: { client_id: string; callback: (response: { credential: string }) => void }) => void;
-          renderButton: (element: HTMLElement, options: Record<string, unknown>) => void;
-        };
-      };
-    };
-  }
-}
 
 const GOOGLE_CLIENT_ID = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID || "";
 
@@ -98,7 +86,7 @@ function prettyStatus(status: string) {
 }
 
 export function AccountContent() {
-  const googleButtonRef = useRef<HTMLDivElement>(null);
+  const [googleButtonNode, setGoogleButtonNode] = useState<HTMLDivElement | null>(null);
   const [activeTab, setActiveTab] = useState<AccountTab>("details");
   const [profile, setProfile] = useState<AccountProfile>(() => getStoredAccountProfile());
   const [accountToken, setAccountToken] = useState(() => getStoredAccountToken());
@@ -136,34 +124,18 @@ export function AccountContent() {
   };
 
   useEffect(() => {
-    if (!GOOGLE_CLIENT_ID || accountToken) return;
+    if (!GOOGLE_CLIENT_ID || accountToken || !googleButtonNode) return;
 
-    const initializeGoogleButton = () => {
-      if (!window.google || !googleButtonRef.current) return;
-      googleButtonRef.current.innerHTML = "";
-      window.google.accounts.id.initialize({
-        client_id: GOOGLE_CLIENT_ID,
-        callback: (response) => handleGoogleCredential(response.credential),
-      });
-      window.google.accounts.id.renderButton(googleButtonRef.current, {
-        theme: "outline",
-        size: "large",
-        width: 280,
-      });
+    let cancelled = false;
+    loadGoogleIdentity().then((googleId) => {
+      if (cancelled || !googleId || !googleButtonNode.isConnected) return;
+      renderGoogleSignInButton(googleButtonNode, GOOGLE_CLIENT_ID, handleGoogleCredential);
+    });
+
+    return () => {
+      cancelled = true;
     };
-
-    if (window.google) {
-      initializeGoogleButton();
-      return;
-    }
-
-    const script = document.createElement("script");
-    script.src = "https://accounts.google.com/gsi/client";
-    script.async = true;
-    script.defer = true;
-    script.onload = initializeGoogleButton;
-    document.body.appendChild(script);
-  }, [accountToken]);
+  }, [googleButtonNode, accountToken]);
 
   useEffect(() => {
     if (!accountToken) {
@@ -280,7 +252,7 @@ export function AccountContent() {
         <div className="max-w-[650px]">
           <p className="text-[14px] text-[#686B59] mb-5">Sign in with Google to see your own orders and saved addresses.</p>
           {GOOGLE_CLIENT_ID ? (
-            <div ref={googleButtonRef} />
+            <div ref={setGoogleButtonNode} />
           ) : (
             <p className="text-[13px] font-medium text-[#B5483B]">Google login is missing NEXT_PUBLIC_GOOGLE_CLIENT_ID.</p>
           )}

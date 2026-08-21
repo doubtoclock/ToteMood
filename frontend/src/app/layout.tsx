@@ -71,6 +71,8 @@ export default function RootLayout({
         <link rel="preconnect" href="https://api.fontshare.com" />
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
+        <link rel="preconnect" href="https://accounts.google.com" />
+        <link rel="preload" as="script" href="https://accounts.google.com/gsi/client" />
       </head>
       <body 
         className="min-h-full flex flex-col font-sans text-foreground bg-background antialiased selection:bg-accent selection:text-foreground"

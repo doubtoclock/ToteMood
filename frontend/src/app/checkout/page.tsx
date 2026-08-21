@@ -7,20 +7,13 @@ import Link from "next/link";
 import { Upload, CheckCircle2, ArrowLeft, Loader2, Lock, Check } from "lucide-react";
 import { useEffect, useState, useRef } from "react";
 import { apiFetch } from "@/lib/api";
+import { loadGoogleIdentity, renderGoogleSignInButton } from "@/lib/googleSignIn";
 import { useProducts } from "@/lib/useProducts";
 import { SavedAddress, AccountSession, accountAuthHeaders, getStoredAccountProfile, getStoredAccountToken, saveStoredAccountSession } from "@/lib/account";
 
 declare global {
   interface Window {
     Razorpay?: new (options: Record<string, unknown>) => { open: () => void };
-    google?: {
-      accounts: {
-        id: {
-          initialize: (options: { client_id: string; callback: (response: { credential: string }) => void }) => void;
-          renderButton: (element: HTMLElement, options: Record<string, unknown>) => void;
-        };
-      };
-    };
   }
 }
 
@@ -64,7 +57,7 @@ export default function CheckoutPage() {
   const [selectedAddressId, setSelectedAddressId] = useState("other");
   const [saveAddress, setSaveAddress] = useState(false);
   const [paymentMethod, setPaymentMethod] = useState<"cod" | "prepaid">("cod");
-  const googleButtonRef = useRef<HTMLDivElement>(null);
+  const [googleButtonNode, setGoogleButtonNode] = useState<HTMLDivElement | null>(null);
   const [formValues, setFormValues] = useState(() => {
     const profile = getStoredAccountProfile();
     return {
@@ -99,34 +92,18 @@ export default function CheckoutPage() {
   };
 
   useEffect(() => {
-    if (!GOOGLE_CLIENT_ID || accountToken) return;
+    if (!GOOGLE_CLIENT_ID || accountToken || !googleButtonNode) return;
 
-    const initializeGoogleButton = () => {
-      if (!window.google || !googleButtonRef.current) return;
-      googleButtonRef.current.innerHTML = "";
-      window.google.accounts.id.initialize({
-        client_id: GOOGLE_CLIENT_ID,
-        callback: (response) => handleGoogleCredential(response.credential),
-      });
-      window.google.accounts.id.renderButton(googleButtonRef.current, {
-        theme: "outline",
-        size: "large",
-        width: 280,
-      });
+    let cancelled = false;
+    loadGoogleIdentity().then((googleId) => {
+      if (cancelled || !googleId || !googleButtonNode.isConnected) return;
+      renderGoogleSignInButton(googleButtonNode, GOOGLE_CLIENT_ID, handleGoogleCredential);
+    });
+
+    return () => {
+      cancelled = true;
     };
-
-    if (window.google) {
-      initializeGoogleButton();
-      return;
-    }
-
-    const script = document.createElement("script");
-    script.src = "https://accounts.google.com/gsi/client";
-    script.async = true;
-    script.defer = true;
-    script.onload = initializeGoogleButton;
-    document.body.appendChild(script);
-  }, [accountToken]);
+  }, [googleButtonNode, accountToken]);
 
   const setFormValue = (key: keyof typeof emptyCheckoutForm, value: string) => {
     setSelectedAddressId("other");
@@ -390,7 +367,7 @@ export default function CheckoutPage() {
           </p>
           <div className="flex justify-center">
             {GOOGLE_CLIENT_ID ? (
-              <div ref={googleButtonRef} />
+              <div ref={setGoogleButtonNode} />
             ) : (
               <p className="text-[13px] font-medium text-[#B5483B]">Google login is not configured.</p>
             )}
