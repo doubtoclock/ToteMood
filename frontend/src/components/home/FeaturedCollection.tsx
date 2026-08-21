@@ -51,7 +51,7 @@ export function FeaturedCollection() {
               Carry a little something with you.
             </h2>
             <p className="text-lg text-[#5A5A55]">
-              Let's customize your tote bag with your personalized image and text.
+              Let&apos;s customize your tote bag with your personalized image and text.
             </p>
           </div>
           <Link
@@ -105,7 +105,7 @@ export function FeaturedCollection() {
                 {/* Product Info */}
                 <div className="flex flex-col items-center text-center mt-auto">
                   <span className="text-[10px] md:text-xs tracking-[0.2em] uppercase text-[#8C867C] mb-3">
-                    {product.category}
+                    {(product.label || "new").charAt(0).toUpperCase() + (product.label || "new").slice(1)}
                   </span>
                   <h3 className="text-lg md:text-xl font-serif text-[#1C1C1A] mb-2 line-clamp-1">
                     {product.name}

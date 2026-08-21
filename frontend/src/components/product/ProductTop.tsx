@@ -1,13 +1,22 @@
 "use client";
 
 import Image from "next/image";
-import { useState, useEffect, useMemo } from "react";
+import { useState, useMemo } from "react";
 import { Star, Truck, CheckCircle2, Lock } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { Product, products as staticProducts } from "@/lib/data/products";
 import { useCartStore } from "@/lib/store/useCartStore";
 
 const WHATSAPP_URL = "https://wa.me/919890842755?text=Hi%20Totemood!%20I%27d%20like%20a%20free%20sample%20preview%20please.";
+const labelText = (label?: Product["label"]) => {
+  const safeLabel = label || "new";
+  return safeLabel.charAt(0).toUpperCase() + safeLabel.slice(1);
+};
+const customizationText = (category: string) => {
+  if (category === "image+text") return "Add your image and text during checkout.";
+  if (category === "image") return "Add your image during checkout.";
+  return "No checkout customization required.";
+};
 
 export function ProductTop({ product }: { product: Product }) {
   const router = useRouter();
@@ -40,13 +49,10 @@ export function ProductTop({ product }: { product: Product }) {
     return [product.image];
   }, [product]);
 
-  const [activeImage, setActiveImage] = useState(thumbnails[0] || product.image);
-
-  useEffect(() => {
-    if (thumbnails.length > 0) {
-      setActiveImage(thumbnails[0]);
-    }
-  }, [thumbnails]);
+  const [selectedImage, setSelectedImage] = useState<{ productId: string; image: string } | null>(null);
+  const activeImage = selectedImage?.productId === product.id && thumbnails.includes(selectedImage.image)
+    ? selectedImage.image
+    : thumbnails[0] || product.image;
 
   return (
     <section className="pt-0 pb-8 md:pb-12">
@@ -99,7 +105,7 @@ export function ProductTop({ product }: { product: Product }) {
               {thumbnails.map((thumb, index) => (
                 <button
                   key={index}
-                  onClick={() => setActiveImage(thumb)}
+                  onClick={() => setSelectedImage({ productId: product.id, image: thumb })}
                   className={`relative aspect-square rounded-[14px] overflow-hidden bg-[#F5F3EC] border-[1.5px] transition-all ${
                     activeImage === thumb ? "border-[#8E9476]" : "border-[#E8E5DC] hover:border-[#8C867C]"
                   }`}
@@ -121,7 +127,7 @@ export function ProductTop({ product }: { product: Product }) {
             
             {/* Category */}
             <p className="text-[12px] font-bold text-[#8C867C] uppercase tracking-[0.15em] mb-4">
-              {product.category}
+              {labelText(product.label)}
             </p>
 
             <h1 className="text-[32px] md:text-[40px] font-title text-[#252A1A] leading-[1.1] tracking-tight mb-4">
@@ -196,7 +202,7 @@ export function ProductTop({ product }: { product: Product }) {
                   <CheckCircle2 className="w-5 h-5 text-[#8E9476] shrink-0 mt-0.5" />
                   <div>
                     <h4 className="text-[14px] font-bold text-[#252A1A] mb-0.5">Free Customisation Included</h4>
-                    <p className="text-[13px] text-[#686B59]">Add your image and text during checkout.</p>
+                    <p className="text-[13px] text-[#686B59]">{customizationText(product.category)}</p>
                   </div>
                 </div>
               )}

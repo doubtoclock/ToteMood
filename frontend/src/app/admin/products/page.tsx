@@ -14,9 +14,24 @@ interface AdminProduct {
   oldPrice?: number | null;
   image: string;
   isCustomizable: boolean;
+  label: "bestseller" | "new" | "premium";
   category: string;
   inventoryCount: number;
 }
+
+const normalizeAdminLabel = (product: AdminProduct): AdminProduct["label"] => {
+  const value = String(product.label || product.category || "").trim().toLowerCase();
+  return value === "bestseller" || value === "premium" || value === "new" ? value : "new";
+};
+
+const normalizeAdminCategory = (product: AdminProduct) => {
+  const value = String(product.category || "").trim().toLowerCase().replace(/\s*\+\s*/g, "+");
+  if (value === "image" || value === "image+text" || value === "no customization") return value;
+  if (!product.isCustomizable) return "no customization";
+
+  const searchable = `${product.id} ${product.name} ${product.description}`.toLowerCase();
+  return searchable.includes("text") || searchable.includes("emoji") ? "image+text" : "image";
+};
 
 export default function AdminProducts() {
   const [products, setProducts] = useState<AdminProduct[]>([]);
@@ -29,9 +44,9 @@ export default function AdminProducts() {
   const [description, setDescription] = useState("");
   const [price, setPrice] = useState("");
   const [oldPrice, setOldPrice] = useState("");
-  const [category, setCategory] = useState("Custom Totes");
+  const [label, setLabel] = useState<AdminProduct["label"]>("new");
+  const [category, setCategory] = useState("image");
   const [inventoryCount, setInventoryCount] = useState("0");
-  const [isCustomizable, setIsCustomizable] = useState(false);
   const [image, setImage] = useState("");
   const [imagePreview, setImagePreview] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -95,9 +110,9 @@ export default function AdminProducts() {
     setDescription("");
     setPrice("");
     setOldPrice("");
-    setCategory("Custom Totes");
+    setLabel("new");
+    setCategory("image");
     setInventoryCount("0");
-    setIsCustomizable(false);
     setImage("");
     setImagePreview("");
     setIsModalOpen(true);
@@ -109,9 +124,9 @@ export default function AdminProducts() {
     setDescription(product.description);
     setPrice(product.price.toString());
     setOldPrice(product.oldPrice ? product.oldPrice.toString() : "");
-    setCategory(product.category);
+    setLabel(normalizeAdminLabel(product));
+    setCategory(normalizeAdminCategory(product));
     setInventoryCount(product.inventoryCount.toString());
-    setIsCustomizable(product.isCustomizable);
     setImage(product.image);
     setImagePreview(product.image);
     setIsModalOpen(true);
@@ -139,9 +154,10 @@ export default function AdminProducts() {
       description,
       price: parseFloat(price),
       oldPrice: oldPrice ? parseFloat(oldPrice) : null,
+      label,
       category,
       inventoryCount: parseInt(inventoryCount, 10),
-      isCustomizable,
+      isCustomizable: category !== "no customization",
       image: image || "/images/product_mockup.png"
     };
 
@@ -203,7 +219,9 @@ export default function AdminProducts() {
                     </div>
                     <div>
                       <div className="font-bold text-[#1C1C1A]">{product.name}</div>
-                      <div className="text-xs text-[#5A5A55]">{product.category}</div>
+                      <div className="text-xs text-[#5A5A55]">
+                        {(product.label || "new").charAt(0).toUpperCase() + (product.label || "new").slice(1)} · {product.category}
+                      </div>
                     </div>
                   </div>
                 </td>
@@ -224,9 +242,9 @@ export default function AdminProducts() {
                 </td>
                 <td className="p-4">
                   <span className={`px-2 py-1 rounded text-xs font-bold ${
-                    product.isCustomizable ? 'bg-[#757D5C]/20 text-[#757D5C]' : 'bg-gray-100 text-gray-600'
+                    product.category !== "no customization" ? 'bg-[#757D5C]/20 text-[#757D5C]' : 'bg-gray-100 text-gray-600'
                   }`}>
-                    {product.isCustomizable ? 'Yes' : 'No'}
+                    {product.category !== "no customization" ? 'Yes' : 'No'}
                   </span>
                 </td>
                 <td className="p-4 text-right">
@@ -278,6 +296,19 @@ export default function AdminProducts() {
                     <input type="text" required value={name} onChange={e => setName(e.target.value)} className="w-full bg-white border border-[#1C1C1A]/20 rounded-xl px-4 py-3 text-[#1C1C1A] text-sm focus:outline-none focus:border-[#757D5C]" />
                   </div>
                   <div>
+                    <label className="text-xs font-bold uppercase tracking-widest text-[#5A5A55] block mb-2">Label</label>
+                    <select
+                      required
+                      value={label}
+                      onChange={e => setLabel(e.target.value as AdminProduct["label"])}
+                      className="w-full bg-white border border-[#1C1C1A]/20 rounded-xl px-4 py-3 text-[#1C1C1A] text-sm focus:outline-none focus:border-[#757D5C] cursor-pointer"
+                    >
+                      <option value="bestseller">Bestseller</option>
+                      <option value="new">New</option>
+                      <option value="premium">Premium</option>
+                    </select>
+                  </div>
+                  <div>
                     <label className="text-xs font-bold uppercase tracking-widest text-[#5A5A55] block mb-2">Category</label>
                     <select
                       required
@@ -285,12 +316,9 @@ export default function AdminProducts() {
                       onChange={e => setCategory(e.target.value)}
                       className="w-full bg-white border border-[#1C1C1A]/20 rounded-xl px-4 py-3 text-[#1C1C1A] text-sm focus:outline-none focus:border-[#757D5C] cursor-pointer"
                     >
-                      <option value="Bestseller">Bestseller</option>
-                      <option value="New">New</option>
-                      <option value="Image Only">Image Only</option>
-                      <option value="Image + Text">Image + Text</option>
-                      <option value="No Customization">No Customization</option>
-                      <option value="Premium">Premium</option>
+                      <option value="image">Image</option>
+                      <option value="image+text">Image + Text</option>
+                      <option value="no customization">No Customization</option>
                     </select>
                   </div>
                   <div className="flex gap-4">
@@ -307,12 +335,6 @@ export default function AdminProducts() {
                     <div className="flex-1">
                       <label className="text-xs font-bold uppercase tracking-widest text-[#5A5A55] block mb-2">Inventory</label>
                       <input type="number" required value={inventoryCount} onChange={e => setInventoryCount(e.target.value)} className="w-full bg-white border border-[#1C1C1A]/20 rounded-xl px-4 py-3 text-[#1C1C1A] text-sm focus:outline-none focus:border-[#757D5C]" />
-                    </div>
-                    <div className="flex-1 flex items-end pb-3">
-                      <label className="flex items-center gap-2 cursor-pointer">
-                        <input type="checkbox" checked={isCustomizable} onChange={e => setIsCustomizable(e.target.checked)} className="w-5 h-5 accent-[#757D5C]" />
-                        <span className="text-sm font-bold text-[#1C1C1A]">Is Customizable?</span>
-                      </label>
                     </div>
                   </div>
                 </div>

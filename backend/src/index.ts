@@ -61,10 +61,96 @@ app.use((req: Request, _res: Response, next: NextFunction) => {
   next();
 });
 
+function getPrismaDatabaseUrl(): string {
+  const databaseUrl = process.env.DATABASE_URL;
+  if (!databaseUrl) {
+    throw new Error('DATABASE_URL environment variable is not set.');
+  }
+
+  try {
+    const url = new URL(databaseUrl);
+    const usesPooler = url.hostname.includes('pooler.supabase.com') || url.port === '6543';
+    if (usesPooler && !url.searchParams.has('pgbouncer')) {
+      url.searchParams.set('pgbouncer', 'true');
+    }
+    if (usesPooler && !url.searchParams.has('connection_limit')) {
+      url.searchParams.set('connection_limit', '1');
+    }
+    return url.toString();
+  } catch {
+    return databaseUrl;
+  }
+}
+
 // Initialize clients
-const prisma = new PrismaClient();
+const prisma = new PrismaClient({
+  datasources: { db: { url: getPrismaDatabaseUrl() } },
+});
 const ORDER_STATUSES = ['LIVE', 'MANIFESTED', 'SHIPPED', 'DD', 'DELIVER', 'RTO', 'CANCELLED', 'SHIP_LATER'] as const;
 type OrderStatusValue = typeof ORDER_STATUSES[number];
+
+const FALLBACK_PRODUCTS = [
+  {
+    id: 'ghibli-art-tote',
+    name: 'CUSTOM GHIBLI ART TOTE BAG',
+    description: 'Bag will have custom Ghibli image only. Add size and approval on WhatsApp after placing orders.',
+    price: 499,
+    oldPrice: 599,
+    image: '/images/product/W1.png',
+    isCustomizable: true,
+    label: 'bestseller',
+    category: 'image',
+    inventoryCount: 50,
+  },
+  {
+    id: 'ghibli-text-tote',
+    name: 'CUSTOM GHIBLI TOTE BAG WITH TEXT',
+    description: 'Custom Ghibli image + custom text. Add size and approval on WhatsApp after placing orders.',
+    price: 599,
+    oldPrice: 749,
+    image: '/images/product/W5.png',
+    isCustomizable: true,
+    label: 'bestseller',
+    category: 'image+text',
+    inventoryCount: 30,
+  },
+  {
+    id: 'emoji-ghibli-tote',
+    name: 'CUTE EMOJI WITH GHIBLI TOTE',
+    description: 'Emoji and text around Ghibli bags. Add size and approval on WhatsApp after placing orders.',
+    price: 599,
+    oldPrice: 719,
+    image: '/images/product/W9.png',
+    isCustomizable: true,
+    label: 'bestseller',
+    category: 'image+text',
+    inventoryCount: 20,
+  },
+  {
+    id: 'polaroid-tote',
+    name: 'POLAROID TOTE BAG',
+    description: 'Old vintage type Polaroid design. Add size and approval on WhatsApp after placing orders.',
+    price: 499,
+    oldPrice: 599,
+    image: '/images/product/W13.png',
+    isCustomizable: true,
+    label: 'new',
+    category: 'image',
+    inventoryCount: 100,
+  },
+  {
+    id: 'any-design-tote',
+    name: 'ANY DESIGN TOTE BAG',
+    description: 'Customer can customise any ready to print design. Add size and approval on WhatsApp after placing orders.',
+    price: 499,
+    oldPrice: 599,
+    image: '/images/product/W17.png',
+    isCustomizable: true,
+    label: 'new',
+    category: 'image',
+    inventoryCount: 85,
+  },
+];
 
 function normalizeOrderStatus(status: unknown): OrderStatusValue | null {
   const normalized = String(status || '').trim().toUpperCase().replace(/[\s-]+/g, '_');
@@ -120,6 +206,7 @@ interface PendingCheckout {
     quantity: number;
     price: number;
     customImageUrl: string | null;
+    customText: string | null;
   }>;
   paymentMethod: 'cod' | 'prepaid';
   createdAt: number;
@@ -254,6 +341,27 @@ function hasAllCheckoutImages(item: any, quantity: number) {
   return quantity === 1 && hasCheckoutImage(item.customImageUrl);
 }
 
+function hasCheckoutText(value: unknown) {
+  return String(value || '').trim().length > 0;
+}
+
+function hasAllCheckoutTexts(item: any, quantity: number) {
+  if (Array.isArray(item.customTexts)) {
+    return item.customTexts.length >= quantity
+      && item.customTexts.slice(0, quantity).every(hasCheckoutText);
+  }
+
+  return quantity === 1 && hasCheckoutText(item.customText);
+}
+
+function firstCheckoutText(item: any) {
+  if (Array.isArray(item.customTexts)) {
+    return String(item.customTexts.find(hasCheckoutText) || '').trim();
+  }
+
+  return String(item.customText || '').trim();
+}
+
 function validateCustomer(data: any) {
   const errors: Record<string, string> = {};
   const customer = {
@@ -313,6 +421,86 @@ function validateAccountAddress(data: any): { address: AccountAddressInput; erro
   return { address, errors };
 }
 
+function isMissingSavedAddressTableError(error: unknown) {
+  if (!error || typeof error !== 'object') return false;
+  const prismaError = error as { code?: string; meta?: { table?: string } };
+  return prismaError.code === 'P2021' && String(prismaError.meta?.table || '').includes('SavedAddress');
+}
+
+function normalizeProductLabel(value: unknown) {
+  const label = String(value || '').trim().toLowerCase();
+  return ['bestseller', 'new', 'premium'].includes(label) ? label : 'new';
+}
+
+function normalizeProductCategory(value: unknown) {
+  const category = String(value || '').trim().toLowerCase().replace(/\s*\+\s*/g, '+');
+  return ['image', 'image+text', 'no customization'].includes(category) ? category : 'image';
+}
+
+let catalogCustomizationColumnsReady = false;
+
+function isMissingCatalogCustomizationColumnError(error: unknown) {
+  if (!error || typeof error !== 'object') return false;
+  const prismaError = error as { code?: string; message?: string; meta?: { column?: string } };
+  const message = String(prismaError.message || '').toLowerCase();
+  const column = String(prismaError.meta?.column || '').toLowerCase();
+
+  return prismaError.code === 'P2022'
+    || column === 'label'
+    || column === 'customtext'
+    || message.includes('product.label')
+    || message.includes('orderitem.customtext')
+    || message.includes('column "label" does not exist')
+    || message.includes('column "customtext" does not exist');
+}
+
+async function ensureCatalogCustomizationColumns() {
+  if (catalogCustomizationColumnsReady) return;
+
+  await prisma.$executeRawUnsafe(`ALTER TABLE "Product" ADD COLUMN IF NOT EXISTS "label" TEXT NOT NULL DEFAULT 'new';`);
+  await prisma.$executeRawUnsafe(`
+    UPDATE "Product"
+    SET "label" = lower("category")
+    WHERE lower("category") IN ('bestseller', 'new', 'premium');
+  `);
+  await prisma.$executeRawUnsafe(`
+    UPDATE "Product"
+    SET "category" = CASE
+      WHEN lower("category") = 'no customization' OR "isCustomizable" = false THEN 'no customization'
+      WHEN lower("category") = 'image + text' OR lower("category") = 'image+text' THEN 'image+text'
+      WHEN lower("name") LIKE '%text%' OR lower("name") LIKE '%emoji%' OR lower("description") LIKE '%text%' THEN 'image+text'
+      ELSE 'image'
+    END
+    WHERE lower("category") NOT IN ('image', 'image+text', 'no customization');
+  `);
+  await prisma.$executeRawUnsafe(`UPDATE "Product" SET "isCustomizable" = "category" <> 'no customization';`);
+  await prisma.$executeRawUnsafe(`ALTER TABLE "OrderItem" ADD COLUMN IF NOT EXISTS "customText" TEXT;`);
+
+  catalogCustomizationColumnsReady = true;
+}
+
+async function ensureSavedAddressTable() {
+  await prisma.$executeRawUnsafe(`
+    CREATE TABLE IF NOT EXISTS "SavedAddress" (
+      "id" TEXT NOT NULL,
+      "email" TEXT NOT NULL,
+      "nickname" TEXT NOT NULL,
+      "firstName" TEXT NOT NULL,
+      "lastName" TEXT NOT NULL,
+      "phone" TEXT NOT NULL,
+      "address" TEXT NOT NULL,
+      "city" TEXT NOT NULL,
+      "state" TEXT NOT NULL,
+      "zip" TEXT NOT NULL,
+      "isDefault" BOOLEAN NOT NULL DEFAULT false,
+      "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      "updatedAt" TIMESTAMP(3) NOT NULL,
+      CONSTRAINT "SavedAddress_pkey" PRIMARY KEY ("id")
+    );
+  `);
+  await prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS "SavedAddress_email_idx" ON "SavedAddress"("email");`);
+}
+
 async function saveAccountAddress(data: any) {
   const { address, errors } = validateAccountAddress(data);
   if (Object.keys(errors).length > 0) {
@@ -340,6 +528,8 @@ async function saveAccountAddress(data: any) {
 }
 
 async function buildVerifiedCheckout(data: any): Promise<PendingCheckout> {
+  await ensureCatalogCustomizationColumns();
+
   const { customer, errors } = validateCustomer(data);
   const incomingItems = Array.isArray(data.items) ? data.items : [];
   const accountUser = verifySessionToken(data.accountToken);
@@ -373,8 +563,16 @@ async function buildVerifiedCheckout(data: any): Promise<PendingCheckout> {
       errors.items = `${product.name} has only ${product.inventoryCount} left in stock.`;
       return null;
     }
-    if (product.isCustomizable && !hasAllCheckoutImages(item, quantity)) {
+    const category = String(product.category || '').trim().toLowerCase();
+    const requiresImage = category === 'image' || category === 'image+text';
+    const requiresText = category === 'image+text';
+
+    if (requiresImage && !hasAllCheckoutImages(item, quantity)) {
       errors.items = 'Please upload artwork for every custom tote before placing your order.';
+      return null;
+    }
+    if (requiresText && !hasAllCheckoutTexts(item, quantity)) {
+      errors.items = 'Please add custom text for every image + text tote before placing your order.';
       return null;
     }
 
@@ -387,6 +585,7 @@ async function buildVerifiedCheckout(data: any): Promise<PendingCheckout> {
       quantity,
       price: product.price,
       customImageUrl: String(customImageUrl || '').trim(),
+      customText: firstCheckoutText(item) || null,
     };
   }).filter(Boolean) as PendingCheckout['items'];
 
@@ -464,6 +663,7 @@ async function createOrderFromCheckout(checkout: PendingCheckout, razorpayPaymen
             quantity: item.quantity,
             priceAtPurchase: item.price,
             customImageUrl: item.customImageUrl,
+            customText: item.customText,
           })),
         },
       },
@@ -573,10 +773,17 @@ app.get('/api/account/addresses', async (req, res) => {
     const user = requireAuthUser(req, res);
     if (!user) return;
 
-    const addresses = await prisma.savedAddress.findMany({
-      where: { email: user.email },
-      orderBy: [{ isDefault: 'desc' }, { updatedAt: 'desc' }],
-    });
+    let addresses: Awaited<ReturnType<typeof prisma.savedAddress.findMany>>;
+    try {
+      addresses = await prisma.savedAddress.findMany({
+        where: { email: user.email },
+        orderBy: [{ isDefault: 'desc' }, { updatedAt: 'desc' }],
+      });
+    } catch (error) {
+      if (!isMissingSavedAddressTableError(error)) throw error;
+      await ensureSavedAddressTable();
+      addresses = [];
+    }
     res.json(addresses);
   } catch (error) {
     console.error('Failed to fetch saved addresses:', error);
@@ -589,7 +796,14 @@ app.post('/api/account/addresses', async (req, res) => {
     const user = requireAuthUser(req, res);
     if (!user) return;
 
-    const address = await saveAccountAddress({ ...req.body, email: user.email });
+    let address: Awaited<ReturnType<typeof saveAccountAddress>>;
+    try {
+      address = await saveAccountAddress({ ...req.body, email: user.email });
+    } catch (error) {
+      if (!isMissingSavedAddressTableError(error)) throw error;
+      await ensureSavedAddressTable();
+      address = await saveAccountAddress({ ...req.body, email: user.email });
+    }
     res.status(201).json(address);
   } catch (error: any) {
     if (error.details) {
@@ -610,7 +824,14 @@ app.put('/api/account/addresses/:id', async (req, res) => {
       return res.status(400).json({ error: 'Please correct the highlighted details.', details: errors });
     }
 
-    const existing = await prisma.savedAddress.findUnique({ where: { id: req.params.id } });
+    let existing: Awaited<ReturnType<typeof prisma.savedAddress.findUnique>>;
+    try {
+      existing = await prisma.savedAddress.findUnique({ where: { id: req.params.id } });
+    } catch (error) {
+      if (!isMissingSavedAddressTableError(error)) throw error;
+      await ensureSavedAddressTable();
+      existing = null;
+    }
     if (!existing || existing.email !== user.email) {
       return res.status(404).json({ error: 'Address not found.' });
     }
@@ -641,7 +862,14 @@ app.delete('/api/account/addresses/:id', async (req, res) => {
     const user = requireAuthUser(req, res);
     if (!user) return;
 
-    const existing = await prisma.savedAddress.findUnique({ where: { id: req.params.id } });
+    let existing: Awaited<ReturnType<typeof prisma.savedAddress.findUnique>>;
+    try {
+      existing = await prisma.savedAddress.findUnique({ where: { id: req.params.id } });
+    } catch (error) {
+      if (!isMissingSavedAddressTableError(error)) throw error;
+      await ensureSavedAddressTable();
+      existing = null;
+    }
     if (!existing || existing.email !== user.email) {
       return res.status(404).json({ error: 'Address not found.' });
     }
@@ -827,7 +1055,9 @@ app.post('/gokwik/v1/cart', gokwikAuthMiddleware, async (req, res) => {
         price: product?.price || item.price || 0,
         image: product?.image || item.image || '',
         is_customizable: product?.isCustomizable || false,
+        customization_category: product?.category || 'no customization',
         custom_image_url: item.customImageUrl || null,
+        custom_text: item.customText || null,
       };
     });
 
@@ -935,6 +1165,7 @@ app.post('/gokwik/v1/cart/place-order', gokwikAuthMiddleware, async (req, res) =
       quantity: item.quantity || 1,
       priceAtPurchase: item.price || 0,
       customImageUrl: item.customImageUrl || null,
+      customText: item.customText || null,
     }));
 
     // Create order in Prisma
@@ -1153,30 +1384,44 @@ app.post('/gokwik/v1/cart/remove-out-of-stock-items', gokwikAuthMiddleware, (_re
 
 app.get('/api/products', async (_req, res) => {
   try {
-    const products = await prisma.product.findMany({
-      orderBy: { createdAt: 'asc' }
-    });
+    let products;
+    try {
+      products = await prisma.product.findMany({
+        orderBy: { createdAt: 'asc' }
+      });
+    } catch (error) {
+      if (!isMissingCatalogCustomizationColumnError(error)) throw error;
+      await ensureCatalogCustomizationColumns();
+      products = await prisma.product.findMany({
+        orderBy: { createdAt: 'asc' }
+      });
+    }
     res.json(products);
   } catch (error) {
     console.error("Failed to fetch products:", error);
-    res.status(500).json({ error: "Failed to fetch products" });
+    res.json(FALLBACK_PRODUCTS);
   }
 });
 
 app.get('/api/products/:id', async (req, res) => {
   try {
+    await ensureCatalogCustomizationColumns();
     const product = await prisma.product.findUnique({ where: { id: req.params.id } });
     if (!product) return res.status(404).json({ error: "Product not found" });
     res.json(product);
   } catch (error) {
     console.error("Failed to fetch product:", error);
-    res.status(500).json({ error: "Failed to fetch product" });
+    const product = FALLBACK_PRODUCTS.find((fallbackProduct) => fallbackProduct.id === req.params.id);
+    if (!product) return res.status(404).json({ error: "Product not found" });
+    res.json(product);
   }
 });
 
 app.post('/api/products', async (req, res) => {
   try {
+    await ensureCatalogCustomizationColumns();
     const data = req.body;
+    const category = normalizeProductCategory(data.category);
     const product = await prisma.product.create({
       data: {
         name: data.name,
@@ -1184,8 +1429,9 @@ app.post('/api/products', async (req, res) => {
         price: data.price,
         oldPrice: data.oldPrice || null,
         image: data.image,
-        isCustomizable: data.isCustomizable || false,
-        category: data.category,
+        isCustomizable: category !== 'no customization',
+        label: normalizeProductLabel(data.label || data.category),
+        category,
         inventoryCount: data.inventoryCount || 0,
       }
     });
@@ -1199,7 +1445,9 @@ app.post('/api/products', async (req, res) => {
 
 app.put('/api/products/:id', async (req, res) => {
   try {
+    await ensureCatalogCustomizationColumns();
     const data = req.body;
+    const category = normalizeProductCategory(data.category);
     const product = await prisma.product.update({
       where: { id: req.params.id },
       data: {
@@ -1208,8 +1456,9 @@ app.put('/api/products/:id', async (req, res) => {
         price: data.price,
         oldPrice: data.oldPrice || null,
         image: data.image,
-        isCustomizable: data.isCustomizable || false,
-        category: data.category,
+        isCustomizable: category !== 'no customization',
+        label: normalizeProductLabel(data.label || data.category),
+        category,
         inventoryCount: data.inventoryCount || 0,
       }
     });

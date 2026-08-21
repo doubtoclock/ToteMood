@@ -103,8 +103,10 @@ export function CartDrawer() {
                             <h3 className="text-[14px] font-medium text-[#252A1A] leading-tight">
                               {item.product.name}
                             </h3>
-                            {item.product.category && (
-                              <span className="text-[12px] text-[#8C867C] mt-1">{item.product.category}</span>
+                            {item.product.label && (
+                              <span className="text-[12px] text-[#8C867C] mt-1">
+                                {(item.product.label || "new").charAt(0).toUpperCase() + (item.product.label || "new").slice(1)}
+                              </span>
                             )}
                           </div>
                           <button 

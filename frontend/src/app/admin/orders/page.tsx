@@ -11,6 +11,7 @@ interface AdminOrderItem {
   quantity: number;
   priceAtPurchase: number;
   customImageUrl?: string | null;
+  customText?: string | null;
   product?: {
     name?: string;
     image?: string;
@@ -312,6 +313,9 @@ export default function AdminOrders() {
                         <div className="flex-1">
                           <div className="font-bold text-[#1C1C1A]">{item.product?.name || 'Unknown Product'}</div>
                           <div className="text-sm text-[#5A5A55]">Qty: {item.quantity} × ₹{item.priceAtPurchase.toFixed(2)}</div>
+                          {item.customText && (
+                            <div className="text-xs text-[#5A5A55] mt-1">Text: {item.customText}</div>
+                          )}
                         </div>
                         <div className="font-bold text-[#1C1C1A]">
                           ₹{(item.quantity * item.priceAtPurchase).toFixed(2)}
@@ -365,6 +369,9 @@ export default function AdminOrders() {
                     <div className="text-xs font-medium text-[#1C1C1A] mb-2 truncate" title={item.product?.name}>
                       For: {item.product?.name}
                     </div>
+                    {item.customText && (
+                      <div className="text-xs text-[#5A5A55] mb-2 break-words">Text: {item.customText}</div>
+                    )}
                     <div className="w-full aspect-square relative rounded-lg overflow-hidden bg-[#EAECE3] border border-[#1C1C1A]/5 mb-3">
                       <Image src={customImageUrl} alt="Custom upload" fill className="object-cover" />
                     </div>

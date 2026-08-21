@@ -1,5 +1,7 @@
 ALTER TABLE "Order" ADD COLUMN IF NOT EXISTS "addressNickname" TEXT NOT NULL DEFAULT 'Other';
 
+ALTER TABLE "Order" ALTER COLUMN "status" DROP DEFAULT;
+
 ALTER TYPE "OrderStatus" RENAME TO "OrderStatus_old";
 
 CREATE TYPE "OrderStatus" AS ENUM (
@@ -12,8 +14,6 @@ CREATE TYPE "OrderStatus" AS ENUM (
   'CANCELLED',
   'SHIP_LATER'
 );
-
-ALTER TABLE "Order" ALTER COLUMN "status" DROP DEFAULT;
 
 ALTER TABLE "Order"
   ALTER COLUMN "status" TYPE "OrderStatus"

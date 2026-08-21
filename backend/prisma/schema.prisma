@@ -15,6 +15,7 @@ model Product {
   oldPrice       Float?
   image          String
   isCustomizable Boolean     @default(false)
+  label          String      @default("new")
   category       String
   inventoryCount Int         @default(0)
   createdAt      DateTime    @default(now())
@@ -50,6 +51,7 @@ model OrderItem {
   quantity       Int
   priceAtPurchase Float
   customImageUrl String?
+  customText     String?
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 

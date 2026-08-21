@@ -5,7 +5,24 @@ import { io } from "socket.io-client";
 import { Product, products as staticProducts } from "@/lib/data/products";
 import { apiFetch, SOCKET_URL } from "@/lib/api";
 
-const CACHE_KEY = "totemood_products_cache_v5";
+const CACHE_KEY = "totemood_products_cache_v6";
+const PRODUCT_LABELS = ["bestseller", "new", "premium"] as const;
+const CUSTOMIZATION_CATEGORIES = ["image", "image+text", "no customization"] as const;
+
+function inferCustomizationCategory(product: Product): string {
+  const category = String(product.category || "").trim().toLowerCase();
+  if ((CUSTOMIZATION_CATEGORIES as readonly string[]).includes(category)) return category;
+  if (!product.isCustomizable) return "no customization";
+
+  const searchable = `${product.id} ${product.name} ${product.description}`.toLowerCase();
+  return searchable.includes("text") || searchable.includes("emoji") ? "image+text" : "image";
+}
+
+function normalizeLabel(product: Product, match?: Product): Product["label"] {
+  const rawLabel = String(product.label || product.category || match?.label || "").trim().toLowerCase();
+  if ((PRODUCT_LABELS as readonly string[]).includes(rawLabel)) return rawLabel as Product["label"];
+  return "new";
+}
 
 function getProductGallery(product: Product): string[] {
   let gallery: string[] = [];
@@ -52,6 +69,9 @@ function normalizeProduct(product: Product): Product {
     description: match?.description ?? product.description,
     oldPrice,
     originalPrice: oldPrice ?? undefined,
+    label: normalizeLabel(product, match),
+    category: inferCustomizationCategory(product),
+    isCustomizable: inferCustomizationCategory(product) !== "no customization",
     rating: product.rating ?? match?.rating ?? 4.8,
     reviews: product.reviews ?? match?.reviews ?? 120,
     gallery: getProductGallery(product),
@@ -63,7 +83,7 @@ function readCache(): Product[] | null {
     const raw = sessionStorage.getItem(CACHE_KEY);
     if (!raw) return null;
     const parsed = JSON.parse(raw);
-    if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+    if (Array.isArray(parsed) && parsed.length > 0) return parsed.map(normalizeProduct);
     return null;
   } catch {
     return null;
@@ -79,17 +99,10 @@ function writeCache(products: Product[]) {
 }
 
 export function useProducts() {
-  const [products, setProducts] = useState<Product[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [initialProducts] = useState(() => readCache());
+  const [products, setProducts] = useState<Product[]>(initialProducts ?? []);
+  const [loading, setLoading] = useState(!initialProducts);
   const [error, setError] = useState("");
-
-  useEffect(() => {
-    const cached = readCache();
-    if (cached) {
-      setProducts(cached);
-      setLoading(false);
-    }
-  }, []);
 
   const fetchProducts = useCallback(async () => {
     try {
@@ -99,7 +112,11 @@ export function useProducts() {
       writeCache(normalized);
       setError("");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not load products");
+      const fallbackProducts = staticProducts.map(normalizeProduct);
+      setProducts(fallbackProducts);
+      writeCache(fallbackProducts);
+      setError("");
+      console.error("Could not load live products, using fallback catalog:", err);
     } finally {
       setLoading(false);
     }

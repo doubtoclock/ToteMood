@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Image from "next/image";
 import { Section } from "@/components/layout/Section";
 import { AmbientGlow } from "@/components/ui/AmbientGlow";
@@ -14,7 +14,7 @@ import {
   getStoredAccountProfile,
 } from "@/lib/account";
 import { useAuthStore } from "@/lib/store/useAuthStore";
-import { MapPin, Package, Plus, Trash2, User, LogOut } from "lucide-react";
+import { Loader2, MapPin, Package, Plus, Trash2, User, LogOut } from "lucide-react";
 
 type AccountTab = "details" | "orders" | "addresses";
 
@@ -25,9 +25,11 @@ interface AccountOrderItem {
   quantity: number;
   priceAtPurchase: number;
   customImageUrl?: string | null;
+  customText?: string | null;
   product?: {
     name: string;
     image: string;
+    label: string;
     category: string;
   } | null;
 }
@@ -84,6 +86,7 @@ function prettyStatus(status: string) {
 
 export function AccountContent() {
   const [googleButtonNode, setGoogleButtonNode] = useState<HTMLDivElement | null>(null);
+  const addressFormRef = useRef<HTMLDivElement | null>(null);
   const [activeTab, setActiveTab] = useState<AccountTab>("details");
   const profile = useAuthStore((state) => state.profile);
   const accountToken = useAuthStore((state) => state.token);
@@ -98,6 +101,8 @@ export function AccountContent() {
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [message, setMessage] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+  const [isSavingAddress, setIsSavingAddress] = useState(false);
+  const [deletingAddressId, setDeletingAddressId] = useState<string | null>(null);
   const [showLogoutModal, setShowLogoutModal] = useState(false);
 
   const accountEmail = profile.email.trim().toLowerCase();
@@ -108,6 +113,12 @@ export function AccountContent() {
     () => `${orders.length} order${orders.length === 1 ? "" : "s"}`,
     [orders.length]
   );
+
+  const scrollAddressFormIntoView = () => {
+    window.requestAnimationFrame(() => {
+      addressFormRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    });
+  };
 
   useEffect(() => {
     hydrateAuth();
@@ -180,12 +191,15 @@ export function AccountContent() {
   }, [message]);
 
   const startNewAddress = () => {
+    if (isSavingAddress || deletingAddressId) return;
     setEditingAddress(null);
     setAddressDraft(emptyAddress(profile));
     setFieldErrors({});
+    scrollAddressFormIntoView();
   };
 
   const startEditAddress = (address: SavedAddress) => {
+    if (isSavingAddress || deletingAddressId) return;
     setEditingAddress(address);
     setAddressDraft({
       email: address.email,
@@ -200,13 +214,19 @@ export function AccountContent() {
       isDefault: address.isDefault,
     });
     setFieldErrors({});
+    scrollAddressFormIntoView();
   };
 
   const saveAddress = async () => {
+    if (isSavingAddress) return;
+
     if (!accountToken) {
       setMessage("Sign in with Google before adding addresses.");
       return;
     }
+
+    setIsSavingAddress(true);
+    setFieldErrors({});
 
     try {
       const payload = { ...addressDraft, email: accountEmail };
@@ -233,23 +253,34 @@ export function AccountContent() {
       setEditingAddress(null);
       setAddressDraft(emptyAddress(profile));
       setFieldErrors({});
-      setMessage("Address saved.");
+      setMessage("Address saved successfully.");
     } catch (error) {
       if (error && typeof error === "object" && "details" in error) {
         setFieldErrors((error as { details?: Record<string, string> }).details || {});
       }
       setMessage(error instanceof Error ? error.message : "Could not save address.");
+    } finally {
+      setIsSavingAddress(false);
     }
   };
 
   const deleteAddress = async (addressId: string) => {
     if (!accountToken) return;
-    await apiFetch(`/api/account/addresses/${addressId}`, {
-      method: "DELETE",
-      headers: accountAuthHeaders(),
-    });
-    setAddresses((current) => current.filter((address) => address.id !== addressId));
-    setMessage("Address removed.");
+    if (deletingAddressId) return;
+
+    setDeletingAddressId(addressId);
+    try {
+      await apiFetch(`/api/account/addresses/${addressId}`, {
+        method: "DELETE",
+        headers: accountAuthHeaders(),
+      });
+      setAddresses((current) => current.filter((address) => address.id !== addressId));
+      setMessage("Address removed successfully.");
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Could not remove address.");
+    } finally {
+      setDeletingAddressId(null);
+    }
   };
 
   const AccountDetailsView = () => (
@@ -353,6 +384,9 @@ export function AccountContent() {
             <div className="flex-1">
               <p className="text-[15px] text-[#252A1A] font-medium">{item.product?.name || "Product"}</p>
               <p className="text-[13px] text-[#686B59]">Qty: {item.quantity}</p>
+              {item.customText && (
+                <p className="text-[12px] text-[#686B59] mt-1">Text: {item.customText}</p>
+              )}
             </div>
             <div className="text-[15px] text-[#252A1A] font-medium">₹{(item.priceAtPurchase * item.quantity).toFixed(2)}</div>
           </div>
@@ -394,14 +428,18 @@ export function AccountContent() {
       {!accountToken && <p className="text-[14px] text-[#686B59] mb-6">Sign in with Google before managing addresses.</p>}
 
       {accountToken && (
-        <AddressForm
-          draft={addressDraft}
-          errors={fieldErrors}
-          title={editingAddress ? "Edit address" : "Add address"}
-          onChange={setAddressDraft}
-          onSave={saveAddress}
-          onCancel={() => { setEditingAddress(null); setAddressDraft(emptyAddress(profile)); setFieldErrors({}); }}
-        />
+        <div ref={addressFormRef} className={editingAddress ? "rounded-[18px] ring-2 ring-[#8E9476]/30 ring-offset-4 ring-offset-white transition-shadow" : "transition-shadow"}>
+          <AddressForm
+            draft={addressDraft}
+            errors={fieldErrors}
+            title={editingAddress ? `Editing ${editingAddress.nickname}` : "Add address"}
+            submitLabel={editingAddress ? "Update address" : "Save address"}
+            isSaving={isSavingAddress}
+            onChange={setAddressDraft}
+            onSave={saveAddress}
+            onCancel={() => { setEditingAddress(null); setAddressDraft(emptyAddress(profile)); setFieldErrors({}); }}
+          />
+        </div>
       )}
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-8">
@@ -418,9 +456,22 @@ export function AccountContent() {
               {address.phone}
             </div>
             <div className="flex items-center gap-5 border-t border-[#E8E5DC] pt-4">
-              <button onClick={() => startEditAddress(address)} className="text-[12px] tracking-wide text-[#686B59] hover:text-[#252A1A] transition-colors">Edit</button>
-              <button onClick={() => deleteAddress(address.id)} className="inline-flex items-center gap-1 text-[12px] tracking-wide text-[#b06161] hover:text-[#8c4d4d] transition-colors">
-                <Trash2 className="h-3.5 w-3.5" /> Remove
+              <button
+                type="button"
+                onClick={() => startEditAddress(address)}
+                disabled={isSavingAddress || deletingAddressId !== null}
+                className={`text-[12px] tracking-wide transition-colors disabled:cursor-not-allowed disabled:opacity-60 ${editingAddress?.id === address.id ? "font-bold text-[#252A1A]" : "text-[#686B59] hover:text-[#252A1A]"}`}
+              >
+                {editingAddress?.id === address.id ? "Editing" : "Edit"}
+              </button>
+              <button
+                type="button"
+                onClick={() => deleteAddress(address.id)}
+                disabled={deletingAddressId !== null}
+                className="inline-flex min-w-[82px] items-center gap-1 text-[12px] tracking-wide text-[#b06161] transition-colors hover:text-[#8c4d4d] disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {deletingAddressId === address.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
+                {deletingAddressId === address.id ? "Removing..." : "Remove"}
               </button>
             </div>
           </div>
@@ -531,6 +582,8 @@ function AddressForm({
   draft,
   errors,
   title,
+  submitLabel,
+  isSaving,
   onChange,
   onSave,
   onCancel,
@@ -538,6 +591,8 @@ function AddressForm({
   draft: AddressForm;
   errors: Record<string, string>;
   title: string;
+  submitLabel: string;
+  isSaving: boolean;
   onChange: (draft: AddressForm) => void;
   onSave: () => void;
   onCancel: () => void;
@@ -545,8 +600,22 @@ function AddressForm({
   const setValue = (key: keyof AddressForm, value: string | boolean) => onChange({ ...draft, [key]: value });
 
   return (
-    <form className="border border-[#E8E5DC] rounded-[16px] p-5 bg-[#FAF9F8]/60" onSubmit={(event) => { event.preventDefault(); onSave(); }}>
-      <h3 className="text-[16px] font-title text-[#252A1A] mb-5">{title}</h3>
+    <form
+      className="border border-[#E8E5DC] rounded-[16px] p-5 bg-[#FAF9F8]/60"
+      onSubmit={(event) => {
+        event.preventDefault();
+        if (!isSaving) onSave();
+      }}
+    >
+      <div className="mb-5 flex items-center justify-between gap-3">
+        <h3 className="text-[16px] font-title text-[#252A1A]">{title}</h3>
+        {isSaving && (
+          <span className="inline-flex items-center gap-2 rounded-full border border-[#E8E5DC] bg-white px-3 py-1 text-[10px] font-bold uppercase tracking-widest text-[#686B59] shadow-sm">
+            <Loader2 className="h-3 w-3 animate-spin" />
+            Saving
+          </span>
+        )}
+      </div>
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <div className="sm:col-span-2">
           <label className={labelClass}>Nickname</label>
@@ -594,8 +663,22 @@ function AddressForm({
         </label>
       </div>
       <div className="flex gap-3 pt-5">
-        <button type="submit" className="bg-[#252A1A] text-white h-[46px] px-7 rounded-[14px] text-[12px] font-bold uppercase tracking-widest">Save address</button>
-        <button type="button" onClick={onCancel} className="border border-[#E8E5DC] h-[46px] px-7 rounded-[14px] text-[12px] font-bold uppercase tracking-widest text-[#686B59]">Cancel</button>
+        <button
+          type="submit"
+          disabled={isSaving}
+          className="inline-flex h-[46px] min-w-[156px] items-center justify-center gap-2 rounded-[14px] bg-[#252A1A] px-7 text-[12px] font-bold uppercase tracking-widest text-white transition-colors disabled:cursor-not-allowed disabled:bg-[#5F6252]"
+        >
+          {isSaving && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+          {isSaving ? "Saving..." : submitLabel}
+        </button>
+        <button
+          type="button"
+          onClick={onCancel}
+          disabled={isSaving}
+          className="h-[46px] rounded-[14px] border border-[#E8E5DC] px-7 text-[12px] font-bold uppercase tracking-widest text-[#686B59] transition-colors disabled:cursor-not-allowed disabled:opacity-60"
+        >
+          Cancel
+        </button>
       </div>
     </form>
   );

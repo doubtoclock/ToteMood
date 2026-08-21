@@ -5,7 +5,7 @@ import { AmbientGlow } from "@/components/ui/AmbientGlow";
 import Image from "next/image";
 import Link from "next/link";
 import { Upload, CheckCircle2, ArrowLeft, Loader2, Lock, Check } from "lucide-react";
-import { useEffect, useState, useRef } from "react";
+import { useCallback, useEffect, useState, useRef } from "react";
 import { apiFetch } from "@/lib/api";
 import { loadGoogleIdentity, renderGoogleSignInButton } from "@/lib/googleSignIn";
 import { useProducts } from "@/lib/useProducts";
@@ -22,6 +22,10 @@ const GOOGLE_CLIENT_ID = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID || "";
 
 const DEPOSIT_AMOUNT = 49;
 const VERIFY_RETRY_DELAYS_MS = [1000, 2000];
+const CONFIRMING_ORDER_MIN_MS = 1800;
+const PAYMENT_SETUP_TIMEOUT_MS = 20000;
+const requiresImage = (category: string) => category === "image" || category === "image+text";
+const requiresText = (category: string) => category === "image+text";
 
 interface RazorpayPaymentResponse {
   razorpay_order_id: string;
@@ -30,6 +34,20 @@ interface RazorpayPaymentResponse {
 }
 
 const wait = (delayMs: number) => new Promise((resolve) => setTimeout(resolve, delayMs));
+
+const withTimeout = async <T,>(promise: Promise<T>, timeoutMs: number, message: string) => {
+  let timeoutId: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<never>((_, reject) => {
+    timeoutId = setTimeout(() => reject(new Error(message)), timeoutMs);
+  });
+
+  try {
+    return await Promise.race([promise, timeout]);
+  } finally {
+    if (timeoutId) clearTimeout(timeoutId);
+  }
+};
+
 const emptyCheckoutForm = {
   email: "",
   phone: "",
@@ -49,6 +67,7 @@ export default function CheckoutPage() {
   
   const [activeUpload, setActiveUpload] = useState<{ id: string; index: number } | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
+  const [isConfirmingOrder, setIsConfirmingOrder] = useState(false);
   const [isSuccess, setIsSuccess] = useState(false);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [checkoutError, setCheckoutError] = useState("");
@@ -81,7 +100,7 @@ export default function CheckoutPage() {
   }, [liveProducts, syncProducts]);
 
   // Google sign-in for checkout
-  const handleGoogleCredential = async (credential: string) => {
+  const handleGoogleCredential = useCallback(async (credential: string) => {
     try {
       const session = await apiFetch<AccountSession>("/api/auth/google", {
         method: "POST",
@@ -93,7 +112,7 @@ export default function CheckoutPage() {
       console.error("Google sign-in failed:", error);
       setAuthMessage(error instanceof Error ? error.message : "Google sign-in failed.");
     }
-  };
+  }, [signIn]);
 
   useEffect(() => {
     if (!authMessage) return;
@@ -113,7 +132,7 @@ export default function CheckoutPage() {
     return () => {
       cancelled = true;
     };
-  }, [googleButtonNode, accountToken]);
+  }, [googleButtonNode, accountToken, handleGoogleCredential]);
 
   const setFormValue = (key: keyof typeof emptyCheckoutForm, value: string) => {
     setSelectedAddressId("other");
@@ -158,6 +177,12 @@ export default function CheckoutPage() {
   const loadRazorpay = () =>
     new Promise<boolean>((resolve) => {
       if (window.Razorpay) return resolve(true);
+      const existingScript = document.querySelector<HTMLScriptElement>('script[src="https://checkout.razorpay.com/v1/checkout.js"]');
+      if (existingScript) {
+        existingScript.addEventListener("load", () => resolve(true), { once: true });
+        existingScript.addEventListener("error", () => resolve(false), { once: true });
+        return;
+      }
       const script = document.createElement("script");
       script.src = "https://checkout.razorpay.com/v1/checkout.js";
       script.onload = () => resolve(true);
@@ -178,12 +203,19 @@ export default function CheckoutPage() {
     return errors;
   };
 
-  const missingArtworkCount = () =>
-    items.reduce((count, item) => {
-      if (!item.product.isCustomizable) return count;
-      const missingForItem = Array.from({ length: item.quantity }).filter((_, index) => !item.customImages?.[index]).length;
-      return count + missingForItem;
-    }, 0);
+  const missingCustomization = () =>
+    items.reduce((missing, item) => {
+      const missingImages = requiresImage(item.product.category)
+        ? Array.from({ length: item.quantity }).filter((_, index) => !item.customImages?.[index]).length
+        : 0;
+      const missingTexts = requiresText(item.product.category)
+        ? Array.from({ length: item.quantity }).filter((_, index) => !item.customTexts?.[index]?.trim()).length
+        : 0;
+      return {
+        images: missing.images + missingImages,
+        texts: missing.texts + missingTexts,
+      };
+    }, { images: 0, texts: 0 });
 
   const verifyRazorpayPayment = async (response: RazorpayPaymentResponse) => {
     let lastError: unknown;
@@ -221,17 +253,20 @@ export default function CheckoutPage() {
     e.preventDefault();
     setCheckoutError("");
     setFieldErrors({});
+    setIsConfirmingOrder(false);
 
     const localErrors = validateForm(formValues);
     if (Object.keys(localErrors).length > 0) {
       setFieldErrors(localErrors);
       return;
     }
-    const missingImages = missingArtworkCount();
-    if (missingImages > 0) {
-      const message = missingImages === 1
-        ? "Please upload an image for your custom tote before payment."
-        : `Please upload images for all ${missingImages} custom totes before payment.`;
+    const missing = missingCustomization();
+    if (missing.images > 0 || missing.texts > 0) {
+      const parts = [
+        missing.images > 0 ? `${missing.images} image${missing.images === 1 ? "" : "s"}` : "",
+        missing.texts > 0 ? `${missing.texts} text message${missing.texts === 1 ? "" : "s"}` : "",
+      ].filter(Boolean);
+      const message = `Please add ${parts.join(" and ")} before payment.`;
       setFieldErrors({ items: message });
       setCheckoutError(message);
       return;
@@ -263,23 +298,31 @@ export default function CheckoutPage() {
     };
 
     try {
-      const loaded = await loadRazorpay();
+      const loaded = await withTimeout(
+        loadRazorpay(),
+        PAYMENT_SETUP_TIMEOUT_MS,
+        "Payment checkout took too long to load. Please refresh and try again."
+      );
       const RazorpayCheckout = window.Razorpay;
       if (!loaded || !RazorpayCheckout) {
         throw new Error("Razorpay could not be loaded. Please check your connection and try again.");
       }
 
-      const paymentOrder = await apiFetch<{
-        key: string;
-        razorpayOrderId: string;
-        amount: number;
-        currency: string;
-        total: number;
-        codBalance: number;
-      }>('/api/checkout/razorpay-order', {
-        method: 'POST',
-        body: JSON.stringify(orderData)
-      });
+      const paymentOrder = await withTimeout(
+        apiFetch<{
+          key: string;
+          razorpayOrderId: string;
+          amount: number;
+          currency: string;
+          total: number;
+          codBalance: number;
+        }>('/api/checkout/razorpay-order', {
+          method: 'POST',
+          body: JSON.stringify(orderData)
+        }),
+        PAYMENT_SETUP_TIMEOUT_MS,
+        "Payment setup took too long. Please try again."
+      );
 
       const payNowAmount = paymentMethod === "cod" ? DEPOSIT_AMOUNT : total;
 
@@ -306,12 +349,18 @@ export default function CheckoutPage() {
           },
           handler: async (response: RazorpayPaymentResponse) => {
             try {
-              const result = await verifyRazorpayPayment(response);
+              setIsConfirmingOrder(true);
+              const [result] = await Promise.all([
+                verifyRazorpayPayment(response),
+                wait(CONFIRMING_ORDER_MIN_MS),
+              ]);
               setConfirmedOrderId(result.order.id);
               setIsSuccess(true);
+              setIsConfirmingOrder(false);
               clearCart();
               resolve();
             } catch (err) {
+              setIsConfirmingOrder(false);
               reject(err);
             }
           },
@@ -325,10 +374,53 @@ export default function CheckoutPage() {
         if (details) setFieldErrors(details);
       }
       setCheckoutError(error instanceof Error ? error.message : "Could not place your order. Please try again.");
+      setIsConfirmingOrder(false);
     } finally {
       setIsProcessing(false);
     }
   };
+
+  if (isProcessing && !isConfirmingOrder) {
+    return (
+      <main className="min-h-screen bg-[#FAF9F8] pt-32 pb-24 relative overflow-hidden flex flex-col items-center justify-center text-center px-6">
+        <AmbientGlow color="bg-[#C4C9B3]" opacity={0.2} position="top-[10%] left-[20%]" shape="organic1" />
+
+        <div className="bg-white p-10 md:p-16 rounded-[24px] shadow-sm max-w-lg w-full relative z-10 border border-[#E8E5DC]">
+          <div className="mx-auto mb-6 flex h-16 w-16 items-center justify-center rounded-full border border-[#E8E5DC] bg-[#FAF9F8]">
+            <Loader2 className="h-8 w-8 animate-spin text-[#C4756A]" strokeWidth={1.5} />
+          </div>
+          <h1 className="text-[32px] font-title text-[#252A1A] mb-4">Opening Secure Payment</h1>
+          <p className="text-[#686B59] mb-8 leading-[1.6]">
+            We&apos;re connecting to Razorpay. The payment window should open in a moment.
+          </p>
+          <p className="text-[12px] font-bold uppercase tracking-widest text-[#8C867C]">
+            Please keep this page open
+          </p>
+        </div>
+      </main>
+    );
+  }
+
+  if (isConfirmingOrder) {
+    return (
+      <main className="min-h-screen bg-[#FAF9F8] pt-32 pb-24 relative overflow-hidden flex flex-col items-center justify-center text-center px-6">
+        <AmbientGlow color="bg-[#C4C9B3]" opacity={0.2} position="top-[10%] left-[20%]" shape="organic1" />
+
+        <div className="bg-white p-10 md:p-16 rounded-[24px] shadow-sm max-w-lg w-full relative z-10 border border-[#E8E5DC]">
+          <div className="mx-auto mb-6 flex h-16 w-16 items-center justify-center rounded-full border border-[#E8E5DC] bg-[#FAF9F8]">
+            <Loader2 className="h-8 w-8 animate-spin text-[#8E9476]" strokeWidth={1.5} />
+          </div>
+          <h1 className="text-[32px] font-title text-[#252A1A] mb-4">Confirming Order</h1>
+          <p className="text-[#686B59] mb-8 leading-[1.6]">
+            Payment received. We&apos;re confirming your order and saving the details now.
+          </p>
+          <p className="text-[12px] font-bold uppercase tracking-widest text-[#8C867C]">
+            Please don&apos;t close this page
+          </p>
+        </div>
+      </main>
+    );
+  }
 
   if (isSuccess) {
     return (
@@ -604,27 +696,26 @@ export default function CheckoutPage() {
                       </div>
                       <div className="flex flex-col flex-1 justify-center py-1">
                         <h3 className="text-[14px] font-medium text-[#252A1A] mb-1">{item.product.name}</h3>
-                        <p className="text-[12px] text-[#8C867C] mb-2">{item.product.category}</p>
+                        <p className="text-[12px] text-[#8C867C] mb-2">
+                          {(item.product.label || "new").charAt(0).toUpperCase() + (item.product.label || "new").slice(1)}
+                        </p>
                         <span className="font-bold text-[14px] text-[#252A1A]">₹{(item.product.price * item.quantity).toFixed(2)}</span>
                       </div>
                     </div>
 
                     {/* Premium Image Upload & Custom Text Module */}
-                    {item.product.isCustomizable && (
+                    {item.product.category !== "no customization" && (
                       <div className="flex flex-col gap-3">
                         {Array.from({ length: item.quantity }).map((_, idx) => {
                           const uploadedImage = item.customImages?.[idx];
-                          const showImageError = Boolean(fieldErrors.items && !uploadedImage);
-                          const isTextProduct = 
-                            item.product.name.toLowerCase().includes("text") ||
-                            item.product.name.toLowerCase().includes("emoji") ||
-                            item.product.id.includes("text") ||
-                            item.product.id.includes("emoji") ||
-                            item.product.description.toLowerCase().includes("text");
+                          const customText = item.customTexts?.[idx] || "";
+                          const showImageError = Boolean(fieldErrors.items && requiresImage(item.product.category) && !uploadedImage);
+                          const showTextError = Boolean(fieldErrors.items && requiresText(item.product.category) && !customText.trim());
 
                           return (
                             <div key={idx} className="flex flex-col gap-2">
-                              {uploadedImage ? (
+                              {requiresImage(item.product.category) && (
+                                uploadedImage ? (
                                 <div className="bg-[#FAF9F8] rounded-[12px] p-4 border border-[#E8E5DC] flex items-center justify-between">
                                   <div className="flex items-center gap-3">
                                     <div className="w-[48px] h-[48px] rounded-[8px] overflow-hidden relative border border-[#E8E5DC] bg-white">
@@ -648,7 +739,7 @@ export default function CheckoutPage() {
                                     Change
                                   </button>
                                 </div>
-                              ) : (
+                                ) : (
                                 <button
                                   type="button"
                                   onClick={() => {
@@ -663,11 +754,11 @@ export default function CheckoutPage() {
                                   </div>
                                   <span className="text-[11px] text-[#8C867C]">PNG or JPG &middot; Max 10MB</span>
                                 </button>
+                                )
                               )}
 
-                              {/* Custom Text Input for Products with Text */}
-                              {isTextProduct && (
-                                <div className="bg-[#FAF9F8] p-3.5 rounded-[12px] border border-[#E8E5DC]">
+                              {requiresText(item.product.category) && (
+                                <div className={`bg-[#FAF9F8] p-3.5 rounded-[12px] border ${showTextError ? "border-[#B5483B]" : "border-[#E8E5DC]"}`}>
                                   <div className="flex items-center justify-between mb-1.5">
                                     <label className="block text-[11px] font-bold uppercase tracking-wider text-[#252A1A]">
                                       Custom Text / Message
@@ -676,7 +767,7 @@ export default function CheckoutPage() {
                                   </div>
                                   <input
                                     type="text"
-                                    value={item.customTexts?.[idx] || ""}
+                                    value={customText}
                                     onChange={(e) => setCustomText(item.product.id, idx, e.target.value)}
                                     placeholder="Enter your custom text here..."
                                     className="w-full h-10 px-3.5 bg-white border border-[#E8E5DC] rounded-[8px] text-[13px] text-[#252A1A] placeholder:text-[#8C867C] focus:outline-none focus:border-[#8E9476] transition-colors"

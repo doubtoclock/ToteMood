@@ -8,6 +8,7 @@ export interface Product {
   image: string;
   gallery?: string[];
   isCustomizable: boolean;
+  label: "bestseller" | "new" | "premium";
   category: string;
   rating: number;
   reviews: number;
@@ -34,7 +35,8 @@ Add size and approval on WhatsApp after placing orders.`,
       "/images/product/W4.png",
     ],
     isCustomizable: true,
-    category: "Bestseller",
+    label: "bestseller",
+    category: "image",
     rating: 4.8,
     reviews: 142
   },
@@ -58,7 +60,8 @@ Add size and approval on WhatsApp after placing orders.`,
       "/images/product/W8.png",
     ],
     isCustomizable: true,
-    category: "Bestseller",
+    label: "bestseller",
+    category: "image+text",
     rating: 4.9,
     reviews: 215
   },
@@ -82,7 +85,8 @@ Add size and approval on WhatsApp after placing orders.`,
       "/images/product/W12.png",
     ],
     isCustomizable: true,
-    category: "Bestseller",
+    label: "bestseller",
+    category: "image+text",
     rating: 4.7,
     reviews: 89
   },
@@ -106,7 +110,8 @@ Add size and approval on WhatsApp after placing orders.`,
       "/images/product/W16.png",
     ],
     isCustomizable: true,
-    category: "New",
+    label: "new",
+    category: "image",
     rating: 5.0,
     reviews: 34
   },
@@ -130,7 +135,8 @@ Add size and approval on WhatsApp after placing orders.`,
       "/images/product/W20.png",
     ],
     isCustomizable: true,
-    category: "New",
+    label: "new",
+    category: "image",
     rating: 4.9,
     reviews: 76
   }

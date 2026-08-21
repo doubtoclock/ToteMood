@@ -11,7 +11,8 @@ const mockProducts = [
     oldPrice: 599.00,
     image: "/images/product/W1.png",
     isCustomizable: true,
-    category: "Bestseller",
+    label: "bestseller",
+    category: "image",
     inventoryCount: 50
   },
   {
@@ -22,7 +23,8 @@ const mockProducts = [
     oldPrice: 749.00,
     image: "/images/product/W5.png",
     isCustomizable: true,
-    category: "Bestseller",
+    label: "bestseller",
+    category: "image+text",
     inventoryCount: 30
   },
   {
@@ -33,7 +35,8 @@ const mockProducts = [
     oldPrice: 719.00,
     image: "/images/product/W9.png",
     isCustomizable: true,
-    category: "Bestseller",
+    label: "bestseller",
+    category: "image+text",
     inventoryCount: 20
   },
   {
@@ -44,7 +47,8 @@ const mockProducts = [
     oldPrice: 599.00,
     image: "/images/product/W13.png",
     isCustomizable: true,
-    category: "New",
+    label: "new",
+    category: "image",
     inventoryCount: 100
   },
   {
@@ -55,7 +59,8 @@ const mockProducts = [
     oldPrice: 599.00,
     image: "/images/product/W17.png",
     isCustomizable: true,
-    category: "New",
+    label: "new",
+    category: "image",
     inventoryCount: 85
   }
 ];
