@@ -11,7 +11,7 @@ export default defineConfig({
   reporter: [
     ["list"],
     ["json", { outputFile: "test-results/results.json" }],
-    ["html", { open: "never", outputFolder: "test-results/html" }],
+    ["html", { open: "never", outputFolder: "playwright-report" }],
   ],
   timeout: 30_000,
   use: {
