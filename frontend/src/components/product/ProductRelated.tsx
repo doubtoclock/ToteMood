@@ -25,11 +25,12 @@ export function ProductRelated({ currentProductId, products }: { currentProductI
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 md:gap-8">
-          {relatedProducts.map((product: Product) => (
+          {relatedProducts.map((product: Product, index: number) => (
             <Link 
               href={`/shop/${product.id}`} 
               key={product.id}
-              className="group flex flex-col"
+              className="group flex flex-col animate-fade-in-up"
+              style={{ animationDelay: `${index * 80}ms` }}
             >
               {/* Image Container */}
               <div className="relative aspect-[4/5] w-full overflow-hidden rounded-xl bg-[#EAECE3] mb-4">
@@ -37,6 +38,7 @@ export function ProductRelated({ currentProductId, products }: { currentProductI
                   src={product.image}
                   alt={product.name}
                   fill
+                  loading="lazy"
                   className="object-cover mix-blend-multiply opacity-90 transition-transform duration-700 ease-out group-hover:scale-105"
                   sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 25vw"
                 />

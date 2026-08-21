@@ -4,17 +4,27 @@ import { useCartStore } from "@/lib/store/useCartStore";
 import { AmbientGlow } from "@/components/ui/AmbientGlow";
 import Image from "next/image";
 import Link from "next/link";
-import { Upload, CheckCircle2, ArrowLeft, Loader2, Lock, Check, WalletCards } from "lucide-react";
+import { Upload, CheckCircle2, ArrowLeft, Loader2, Lock, Check } from "lucide-react";
 import { useEffect, useState, useRef } from "react";
 import { apiFetch } from "@/lib/api";
 import { useProducts } from "@/lib/useProducts";
-import { SavedAddress, accountAuthHeaders, getStoredAccountProfile, getStoredAccountToken } from "@/lib/account";
+import { SavedAddress, AccountSession, accountAuthHeaders, getStoredAccountProfile, getStoredAccountToken, saveStoredAccountSession } from "@/lib/account";
 
 declare global {
   interface Window {
     Razorpay?: new (options: Record<string, unknown>) => { open: () => void };
+    google?: {
+      accounts: {
+        id: {
+          initialize: (options: { client_id: string; callback: (response: { credential: string }) => void }) => void;
+          renderButton: (element: HTMLElement, options: Record<string, unknown>) => void;
+        };
+      };
+    };
   }
 }
+
+const GOOGLE_CLIENT_ID = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID || "";
 
 const DEPOSIT_AMOUNT = 49;
 const VERIFY_RETRY_DELAYS_MS = [1000, 2000];
@@ -49,10 +59,12 @@ export default function CheckoutPage() {
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [checkoutError, setCheckoutError] = useState("");
   const [confirmedOrderId, setConfirmedOrderId] = useState("");
-  const [accountToken] = useState(() => getStoredAccountToken());
+  const [accountToken, setAccountToken] = useState(() => getStoredAccountToken());
   const [savedAddresses, setSavedAddresses] = useState<SavedAddress[]>([]);
   const [selectedAddressId, setSelectedAddressId] = useState("other");
   const [saveAddress, setSaveAddress] = useState(false);
+  const [paymentMethod, setPaymentMethod] = useState<"cod" | "prepaid">("cod");
+  const googleButtonRef = useRef<HTMLDivElement>(null);
   const [formValues, setFormValues] = useState(() => {
     const profile = getStoredAccountProfile();
     return {
@@ -71,6 +83,50 @@ export default function CheckoutPage() {
   useEffect(() => {
     syncProducts(liveProducts);
   }, [liveProducts, syncProducts]);
+
+  // Google sign-in for checkout
+  const handleGoogleCredential = async (credential: string) => {
+    try {
+      const session = await apiFetch<AccountSession>("/api/auth/google", {
+        method: "POST",
+        body: JSON.stringify({ credential }),
+      });
+      saveStoredAccountSession(session);
+      setAccountToken(session.token);
+    } catch (error) {
+      console.error("Google sign-in failed:", error);
+    }
+  };
+
+  useEffect(() => {
+    if (!GOOGLE_CLIENT_ID || accountToken) return;
+
+    const initializeGoogleButton = () => {
+      if (!window.google || !googleButtonRef.current) return;
+      googleButtonRef.current.innerHTML = "";
+      window.google.accounts.id.initialize({
+        client_id: GOOGLE_CLIENT_ID,
+        callback: (response) => handleGoogleCredential(response.credential),
+      });
+      window.google.accounts.id.renderButton(googleButtonRef.current, {
+        theme: "outline",
+        size: "large",
+        width: 280,
+      });
+    };
+
+    if (window.google) {
+      initializeGoogleButton();
+      return;
+    }
+
+    const script = document.createElement("script");
+    script.src = "https://accounts.google.com/gsi/client";
+    script.async = true;
+    script.defer = true;
+    script.onload = initializeGoogleButton;
+    document.body.appendChild(script);
+  }, [accountToken]);
 
   const setFormValue = (key: keyof typeof emptyCheckoutForm, value: string) => {
     setSelectedAddressId("other");
@@ -208,12 +264,14 @@ export default function CheckoutPage() {
       customerCity: formValues.city,
       customerState: formValues.state,
       customerZip: formValues.zip,
+      paymentMethod,
       items: items.map(item => ({
         productId: item.product.id,
         quantity: item.quantity,
         price: item.product.price,
         customImageUrl: item.customImages?.[0] || null,
-        customImageUrls: item.customImages?.slice(0, item.quantity) || []
+        customImageUrls: item.customImages?.slice(0, item.quantity) || [],
+        customTexts: item.customTexts?.slice(0, item.quantity) || []
       }))
     };
 
@@ -236,13 +294,17 @@ export default function CheckoutPage() {
         body: JSON.stringify(orderData)
       });
 
+      const payNowAmount = paymentMethod === "cod" ? DEPOSIT_AMOUNT : total;
+
       await new Promise<void>((resolve, reject) => {
         const razorpay = new RazorpayCheckout({
           key: paymentOrder.key,
-          amount: DEPOSIT_AMOUNT * 100,
+          amount: payNowAmount * 100,
           currency: paymentOrder.currency,
           name: "ToteMood",
-          description: "₹49 advance. Remaining amount is cash on delivery.",
+          description: paymentMethod === "cod"
+            ? `₹${DEPOSIT_AMOUNT} advance. Remaining amount is cash on delivery.`
+            : `Full payment of ₹${total.toFixed(2)}`,
           order_id: paymentOrder.razorpayOrderId,
           prefill: {
             name: `${formValues.firstName} ${formValues.lastName}`,
@@ -290,7 +352,7 @@ export default function CheckoutPage() {
           <CheckCircle2 className="w-16 h-16 text-[#8E9476] mx-auto mb-6" strokeWidth={1.5} />
           <h1 className="text-[32px] font-title text-[#252A1A] mb-4">Order Confirmed</h1>
           <p className="text-[#686B59] mb-10 leading-[1.6]">
-            Thank you! We received your ₹49 advance payment. The remaining amount is cash on delivery, and your example Ghibli image will be sent over your WhatsApp number.
+            Thank you for your order! We&apos;ll reach out on WhatsApp with order updates and design proofs before printing.
           </p>
           {confirmedOrderId && (
             <p className="text-[12px] font-bold uppercase tracking-widest text-[#8C867C] mb-6">
@@ -312,6 +374,32 @@ export default function CheckoutPage() {
         <Link href="/shop" className="inline-flex items-center justify-center bg-[#252A1A] text-white h-[54px] px-10 rounded-[14px] font-bold uppercase tracking-[0.1em] text-[13px] hover:bg-[#3A3E2F] transition-colors shadow-sm">
           Return to Shop
         </Link>
+      </main>
+    );
+  }
+
+  if (!accountToken) {
+    return (
+      <main className="min-h-screen bg-[#FAF9F8] pt-32 pb-24 flex flex-col items-center justify-center text-center px-6">
+        <AmbientGlow color="bg-[#C4C9B3]" opacity={0.15} position="top-[10%] left-[20%]" shape="organic1" />
+        <div className="bg-white p-10 md:p-14 rounded-[24px] shadow-sm max-w-md w-full relative z-10 border border-[#E8E5DC]">
+          <Lock className="w-12 h-12 text-[#8E9476] mx-auto mb-6" strokeWidth={1.5} />
+          <h1 className="text-[28px] font-title text-[#252A1A] mb-3">Sign in to checkout</h1>
+          <p className="text-[15px] text-[#686B59] mb-8 leading-relaxed">
+            Please sign in with your Google account to complete your order.
+          </p>
+          <div className="flex justify-center">
+            {GOOGLE_CLIENT_ID ? (
+              <div ref={googleButtonRef} />
+            ) : (
+              <p className="text-[13px] font-medium text-[#B5483B]">Google login is not configured.</p>
+            )}
+          </div>
+          <Link href="/shop" className="inline-flex items-center mt-8 text-[12px] font-bold uppercase tracking-widest text-[#8C867C] hover:text-[#252A1A] transition-colors">
+            <ArrowLeft className="w-3 h-3 mr-1.5" />
+            Back to Shop
+          </Link>
+        </div>
       </main>
     );
   }
@@ -440,24 +528,55 @@ export default function CheckoutPage() {
             <section>
               <h2 className="text-[20px] font-title text-[#252A1A] mb-6 flex items-center gap-3">
                 <span className="flex items-center justify-center w-7 h-7 rounded-full bg-[#252A1A] text-white text-[12px] font-bold">3</span>
-                Payment
+                Payment Method
               </h2>
-              <div className="bg-white p-6 rounded-[20px] border border-[#E8E5DC] shadow-sm">
-                <div className="flex items-start gap-4">
-                  <div className="h-11 w-11 rounded-[12px] bg-[#F5F3EC] flex items-center justify-center text-[#757D5C]">
-                    <WalletCards className="h-5 w-5" />
+              <div className="flex flex-col gap-3">
+                <button
+                  type="button"
+                  onClick={() => setPaymentMethod("cod")}
+                  className={`w-full p-5 rounded-[16px] border-2 text-left transition-all flex items-start gap-4 ${
+                    paymentMethod === "cod"
+                      ? "border-[#252A1A] bg-[#FAF9F8]"
+                      : "border-[#E8E5DC] bg-white hover:border-[#C8C5BC]"
+                  }`}
+                >
+                  <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center mt-0.5 shrink-0 ${
+                    paymentMethod === "cod" ? "border-[#252A1A]" : "border-[#C8C5BC]"
+                  }`}>
+                    {paymentMethod === "cod" && <div className="w-2.5 h-2.5 rounded-full bg-[#252A1A]" />}
                   </div>
                   <div>
-                    <p className="text-[15px] font-bold text-[#252A1A]">Pay only ₹49 now</p>
-                    <p className="text-[13px] text-[#686B59] leading-[1.6] mt-1">
-                      The remaining ₹{codBalance.toFixed(2)} is cash on delivery. Your example Ghibli image will be sent over your WhatsApp number before dispatch.
+                    <p className="text-[15px] font-bold text-[#252A1A]">Cash on Delivery</p>
+                    <p className="text-[13px] text-[#686B59] mt-1 leading-relaxed">
+                      Pay ₹{DEPOSIT_AMOUNT} now online, remaining ₹{codBalance.toFixed(2)} when your order arrives. For custom items, we&apos;ll send a Ghibli sample design on WhatsApp for approval before dispatch.
                     </p>
                   </div>
-                </div>
-                <div className="mt-5 flex items-center gap-2 text-[#5A5A55]">
-                  <Lock className="w-4 h-4" />
-                  <span className="text-[13px] font-medium">Secure Razorpay payment in ToteMood colors.</span>
-                </div>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setPaymentMethod("prepaid")}
+                  className={`w-full p-5 rounded-[16px] border-2 text-left transition-all flex items-start gap-4 ${
+                    paymentMethod === "prepaid"
+                      ? "border-[#252A1A] bg-[#FAF9F8]"
+                      : "border-[#E8E5DC] bg-white hover:border-[#C8C5BC]"
+                  }`}
+                >
+                  <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center mt-0.5 shrink-0 ${
+                    paymentMethod === "prepaid" ? "border-[#252A1A]" : "border-[#C8C5BC]"
+                  }`}>
+                    {paymentMethod === "prepaid" && <div className="w-2.5 h-2.5 rounded-full bg-[#252A1A]" />}
+                  </div>
+                  <div>
+                    <p className="text-[15px] font-bold text-[#252A1A]">Prepaid (Full Payment)</p>
+                    <p className="text-[13px] text-[#686B59] mt-1 leading-relaxed">
+                      Pay the full ₹{total.toFixed(2)} now via Razorpay. Fast &amp; secure.
+                    </p>
+                  </div>
+                </button>
+              </div>
+              <div className="mt-4 flex items-center gap-2 text-[#5A5A55]">
+                <Lock className="w-4 h-4" />
+                <span className="text-[13px] font-medium">Secure Razorpay payment in ToteMood colors.</span>
               </div>
             </section>
           </div>
@@ -596,28 +715,44 @@ export default function CheckoutPage() {
                   <span>Total</span>
                   <span>₹{total.toFixed(2)}</span>
                 </div>
-                <div className="flex justify-between text-[#757D5C] text-[14px] font-bold">
-                  <span>Pay now</span>
-                  <span>₹{DEPOSIT_AMOUNT.toFixed(2)}</span>
-                </div>
-                <div className="flex justify-between text-[#5A5A55] text-[14px]">
-                  <span>Cash on delivery</span>
-                  <span className="font-medium text-[#252A1A]">₹{codBalance.toFixed(2)}</span>
-                </div>
+                {paymentMethod === "cod" ? (
+                  <>
+                    <div className="flex justify-between text-[#757D5C] text-[14px] font-bold">
+                      <span>Pay now</span>
+                      <span>₹{DEPOSIT_AMOUNT.toFixed(2)}</span>
+                    </div>
+                    <div className="flex justify-between text-[#5A5A55] text-[14px]">
+                      <span>Cash on delivery</span>
+                      <span className="font-medium text-[#252A1A]">₹{codBalance.toFixed(2)}</span>
+                    </div>
+                  </>
+                ) : (
+                  <div className="flex justify-between text-[#757D5C] text-[14px] font-bold">
+                    <span>Pay now (full)</span>
+                    <span>₹{total.toFixed(2)}</span>
+                  </div>
+                )}
               </div>
 
               {/* Final CTA Area */}
               <div className="mt-8 flex flex-col gap-4">
+                {items.some(item => item.product.isCustomizable) && (
+                  <div className="bg-[#FFF5F3] border border-[#E8C4BC] rounded-[14px] p-4">
+                    <p className="text-[13px] text-[#6B4A42] leading-relaxed">
+                      Since this is a personalised order, pay <strong>₹{DEPOSIT_AMOUNT} now</strong> to confirm. Pay the remaining amount on delivery, and we&apos;ll send your <strong>Ghibli sample design on WhatsApp</strong> for approval before dispatch.
+                    </p>
+                  </div>
+                )}
                 <button 
                   type="submit" 
                   disabled={isProcessing}
-                  className="w-full bg-[#252A1A] text-white h-[54px] rounded-[14px] font-bold uppercase tracking-[0.1em] text-[13px] hover:bg-[#3A3E2F] transition-colors shadow-sm disabled:opacity-70 disabled:cursor-not-allowed flex items-center justify-center gap-2 group relative overflow-hidden"
+                  className="w-full bg-[#C4756A] text-white h-[54px] rounded-[14px] font-bold uppercase tracking-[0.1em] text-[13px] hover:bg-[#A85D53] transition-colors shadow-sm disabled:opacity-70 disabled:cursor-not-allowed flex items-center justify-center gap-2 group relative overflow-hidden"
                 >
                   {isProcessing ? (
                     <Loader2 className="w-4 h-4 animate-spin" />
                   ) : (
                     <>
-                      Pay ₹49 advance
+                      {paymentMethod === "cod" ? `Pay ₹${DEPOSIT_AMOUNT} advance` : `Pay ₹${total.toFixed(2)}`}
                       <span className="transform group-hover:translate-x-1 transition-transform">&rarr;</span>
                     </>
                   )}
@@ -629,7 +764,12 @@ export default function CheckoutPage() {
                 )}
                 <div className="flex items-center justify-center gap-1.5 text-[#8C867C]">
                   <Lock className="w-[12px] h-[12px]" strokeWidth={2} />
-                  <span className="text-[11px] font-medium">₹49 online now &middot; rest payable by COD</span>
+                  <span className="text-[11px] font-medium">
+                    {paymentMethod === "cod"
+                      ? `₹${DEPOSIT_AMOUNT} online now · rest payable by COD`
+                      : "Full amount payable now via Razorpay"
+                    }
+                  </span>
                 </div>
               </div>
 

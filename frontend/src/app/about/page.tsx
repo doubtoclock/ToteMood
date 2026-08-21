@@ -125,44 +125,18 @@ export default function AboutPage() {
         </Container>
       </Section>
 
-      {/* 4. Brand Philosophy */}
-      <Section className="py-24 bg-[#F5F3EC] border-y border-[#E8E5DC]">
+      {/* 4. Emotional Finish & CTA */}
+      <Section className="py-32 md:py-40 bg-[#F5F3EC] border-y border-[#E8E5DC]">
         <Container>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-12 lg:gap-16">
-            <div className="flex flex-col items-center text-center">
-              <h3 className="text-[20px] md:text-[24px] font-title text-[#252A1A] mb-4">Personal</h3>
-              <p className="text-[16px] text-[#686B59] leading-[1.6]">
-                Every detail is tailored to your unique story, ensuring no two pieces are ever exactly alike.
-              </p>
-            </div>
-            <div className="flex flex-col items-center text-center">
-              <h3 className="text-[20px] md:text-[24px] font-title text-[#252A1A] mb-4">Thoughtful</h3>
-              <p className="text-[16px] text-[#686B59] leading-[1.6]">
-                Created with immense care, deliberate design choices, and a genuine respect for your memories.
-              </p>
-            </div>
-            <div className="flex flex-col items-center text-center">
-              <h3 className="text-[20px] md:text-[24px] font-title text-[#252A1A] mb-4">Real</h3>
-              <p className="text-[16px] text-[#686B59] leading-[1.6]">
-                Grounded in genuine human emotion. We don't make products; we preserve real feelings.
-              </p>
-            </div>
-          </div>
-        </Container>
-      </Section>
-
-      {/* 5. Emotional Finish & CTA */}
-      <Section className="py-32 md:py-40">
-        <Container>
-          <div className="flex flex-col items-center text-center max-w-[600px] mx-auto">
-            <h2 className="text-[40px] md:text-[56px] font-title text-[#252A1A] leading-[1.1] mb-10">
-              Made to mean something.
+          <div className="flex flex-col items-center text-center max-w-[700px] mx-auto">
+            <h2 className="text-[40px] md:text-[56px] lg:text-[64px] font-title text-[#252A1A] leading-[1.1] mb-10">
+              Check out our bestsellers.
             </h2>
             <Link 
               href="/shop"
-              className="text-[14px] md:text-[15px] font-bold uppercase tracking-widest text-[#252A1A] border-b-[1.5px] border-[#252A1A] pb-1 hover:text-[#686B59] hover:border-[#686B59] transition-colors"
+              className="bg-[#252A1A] text-white h-[54px] px-12 rounded-[14px] font-bold uppercase tracking-[0.1em] text-[13px] hover:bg-[#3A3E2F] transition-colors shadow-sm inline-flex items-center justify-center"
             >
-              Explore the collection &rarr;
+              Shop our collection &rarr;
             </Link>
           </div>
         </Container>

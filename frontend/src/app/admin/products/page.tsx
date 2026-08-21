@@ -279,7 +279,19 @@ export default function AdminProducts() {
                   </div>
                   <div>
                     <label className="text-xs font-bold uppercase tracking-widest text-[#5A5A55] block mb-2">Category</label>
-                    <input type="text" required value={category} onChange={e => setCategory(e.target.value)} className="w-full bg-white border border-[#1C1C1A]/20 rounded-xl px-4 py-3 text-[#1C1C1A] text-sm focus:outline-none focus:border-[#757D5C]" />
+                    <select
+                      required
+                      value={category}
+                      onChange={e => setCategory(e.target.value)}
+                      className="w-full bg-white border border-[#1C1C1A]/20 rounded-xl px-4 py-3 text-[#1C1C1A] text-sm focus:outline-none focus:border-[#757D5C] cursor-pointer"
+                    >
+                      <option value="Bestseller">Bestseller</option>
+                      <option value="New">New</option>
+                      <option value="Image Only">Image Only</option>
+                      <option value="Image + Text">Image + Text</option>
+                      <option value="No Customization">No Customization</option>
+                      <option value="Premium">Premium</option>
+                    </select>
                   </div>
                   <div className="flex gap-4">
                     <div className="flex-1">

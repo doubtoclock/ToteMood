@@ -7,6 +7,7 @@ import { ProductFeatures } from "@/components/product/ProductFeatures";
 import { ProductReviews } from "@/components/product/ProductReviews";
 import { ProductFAQ } from "@/components/product/ProductFAQ";
 import { ProductRelated } from "@/components/product/ProductRelated";
+import { ProductSkeleton } from "@/components/product/ProductSkeleton";
 import { ScrollToTop } from "@/components/layout/ScrollToTop";
 import { useProducts } from "@/lib/useProducts";
 import Link from "next/link";
@@ -17,17 +18,19 @@ export default function ProductPage() {
   const { products, loading } = useProducts();
   const product = products.find((p) => p.id === id);
 
+  if (loading && !product) {
+    return <ProductSkeleton />;
+  }
+
   if (!product) {
     return (
       <main className="min-h-screen bg-[#F8F6EF] pt-32 px-6 text-center">
         <h1 className="text-[32px] font-title text-[#252A1A] mb-4">
-          {loading ? "Loading product" : "Product unavailable"}
+          Product unavailable
         </h1>
-        {!loading && (
-          <Link href="/shop" className="text-[13px] font-bold uppercase tracking-widest text-[#757D5C]">
-            Return to shop
-          </Link>
-        )}
+        <Link href="/shop" className="text-[13px] font-bold uppercase tracking-widest text-[#757D5C]">
+          Return to shop
+        </Link>
       </main>
     );
   }

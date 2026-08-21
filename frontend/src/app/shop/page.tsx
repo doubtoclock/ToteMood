@@ -4,13 +4,14 @@ import Image from "next/image";
 import Link from "next/link";
 import { ShoppingCart, Star, Truck } from "lucide-react";
 import { ShopHeader } from "@/components/shop/ShopHeader";
+import { ShopSkeleton } from "@/components/shop/ShopSkeleton";
 import { ShopNewsletter } from "@/components/shop/ShopNewsletter";
 import { CustomerStories } from "@/components/home/CustomerStories";
 import { useProducts } from "@/lib/useProducts";
 import { useCartStore } from "@/lib/store/useCartStore";
 
 export default function ShopPage() {
-  const { products } = useProducts();
+  const { products, loading } = useProducts();
   const addItem = useCartStore((state) => state.addItem);
 
   return (
@@ -38,14 +39,16 @@ export default function ShopPage() {
       {/* 2. Product Discovery */}
       <section id="all-products" className="pt-0 pb-16 md:pt-2 md:pb-24 bg-[#FAF9F8]">
         <div className="container mx-auto px-6 lg:px-12">
-
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-8 md:gap-10">
-            {products.map((product) => (
-              <div
-                key={product.id}
-                className="group flex flex-col transition-all"
-              >
+          {loading ? (
+            <ShopSkeleton />
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-8 md:gap-10">
+              {products.map((product, index) => (
+                <div
+                  key={product.id}
+                  className="group flex flex-col transition-all animate-fade-in-up"
+                  style={{ animationDelay: `${index * 50}ms` }}
+                >
                 {/* Image Container */}
                 <div className="relative aspect-[4/5] w-full overflow-hidden rounded-[20px] bg-[#F5F3EC] mb-5 border border-[#E8E5DC]">
                   <Link href={`/shop/${product.id}`} className="absolute inset-0">
@@ -53,6 +56,7 @@ export default function ShopPage() {
                       src={product.image}
                       alt={product.name}
                       fill
+                      loading="lazy"
                       className="object-cover transition-transform duration-700 ease-out group-hover:scale-105"
                       sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, (max-width: 1280px) 33vw, 25vw"
                     />
@@ -113,7 +117,8 @@ export default function ShopPage() {
                 </Link>
               </div>
             ))}
-          </div>
+            </div>
+          )}
         </div>
       </section>
 

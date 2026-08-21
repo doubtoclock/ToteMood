@@ -5,6 +5,8 @@ import { io } from "socket.io-client";
 import { Product, products as staticProducts } from "@/lib/data/products";
 import { apiFetch, SOCKET_URL } from "@/lib/api";
 
+const CACHE_KEY = "totemood_products_cache";
+
 function getProductGallery(product: Product): string[] {
   if (product.gallery && product.gallery.length > 1) {
     return product.gallery;
@@ -45,15 +47,37 @@ function normalizeProduct(product: Product): Product {
   };
 }
 
+function readCache(): Product[] | null {
+  try {
+    const raw = sessionStorage.getItem(CACHE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+function writeCache(products: Product[]) {
+  try {
+    sessionStorage.setItem(CACHE_KEY, JSON.stringify(products));
+  } catch {
+    // storage full or unavailable
+  }
+}
+
 export function useProducts() {
-  const [products, setProducts] = useState<Product[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [products, setProducts] = useState<Product[]>(() => readCache() ?? []);
+  const [loading, setLoading] = useState(() => readCache() === null);
   const [error, setError] = useState("");
 
   const fetchProducts = useCallback(async () => {
     try {
       const data = await apiFetch<Product[]>("/api/products");
-      setProducts(data.map(normalizeProduct));
+      const normalized = data.map(normalizeProduct);
+      setProducts(normalized);
+      writeCache(normalized);
       setError("");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not load products");

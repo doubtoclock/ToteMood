@@ -113,6 +113,7 @@ interface PendingCheckout {
     price: number;
     customImageUrl: string | null;
   }>;
+  paymentMethod: 'cod' | 'prepaid';
   createdAt: number;
 }
 
@@ -396,6 +397,7 @@ async function buildVerifiedCheckout(data: any): Promise<PendingCheckout> {
     shipping,
     total: subtotal + shipping,
     items: verifiedItems,
+    paymentMethod: data.paymentMethod === 'prepaid' ? 'prepaid' : 'cod',
     createdAt: Date.now(),
   };
 }
@@ -679,6 +681,7 @@ app.post('/api/checkout/razorpay-order', async (req, res) => {
     const checkout = await buildVerifiedCheckout(req.body);
     const receipt = 'tm_' + crypto.randomBytes(10).toString('hex');
     const auth = Buffer.from(`${RAZORPAY_KEY_ID}:${RAZORPAY_KEY_SECRET}`).toString('base64');
+    const payNowAmount = checkout.paymentMethod === 'prepaid' ? checkout.total : CHECKOUT_DEPOSIT_AMOUNT;
     const razorpayRes = await fetch('https://api.razorpay.com/v1/orders', {
       method: 'POST',
       headers: {
@@ -686,12 +689,13 @@ app.post('/api/checkout/razorpay-order', async (req, res) => {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        amount: CHECKOUT_DEPOSIT_AMOUNT * 100,
+        amount: Math.round(payNowAmount * 100),
         currency: 'INR',
         receipt,
         notes: {
           cart_total: checkout.total.toFixed(2),
-          cod_balance: Math.max(0, checkout.total - CHECKOUT_DEPOSIT_AMOUNT).toFixed(2),
+          cod_balance: checkout.paymentMethod === 'prepaid' ? '0' : Math.max(0, checkout.total - CHECKOUT_DEPOSIT_AMOUNT).toFixed(2),
+          payment_method: checkout.paymentMethod,
           customer_phone: checkout.customerPhone,
         },
       }),
@@ -708,10 +712,10 @@ app.post('/api/checkout/razorpay-order', async (req, res) => {
     res.json({
       key: RAZORPAY_KEY_ID,
       razorpayOrderId: razorpayOrder.id,
-      amount: CHECKOUT_DEPOSIT_AMOUNT,
+      amount: payNowAmount,
       currency: 'INR',
       total: checkout.total,
-      codBalance: Math.max(0, checkout.total - CHECKOUT_DEPOSIT_AMOUNT),
+      codBalance: checkout.paymentMethod === 'prepaid' ? 0 : Math.max(0, checkout.total - CHECKOUT_DEPOSIT_AMOUNT),
     });
   } catch (error: any) {
     if (error.details) {
@@ -769,8 +773,8 @@ app.post('/api/checkout/verify-razorpay', async (req, res) => {
 
     res.status(201).json({
       order,
-      paidNow: CHECKOUT_DEPOSIT_AMOUNT,
-      codBalance: Math.max(0, checkout.total - CHECKOUT_DEPOSIT_AMOUNT),
+      paidNow: checkout.paymentMethod === 'prepaid' ? checkout.total : CHECKOUT_DEPOSIT_AMOUNT,
+      codBalance: checkout.paymentMethod === 'prepaid' ? 0 : Math.max(0, checkout.total - CHECKOUT_DEPOSIT_AMOUNT),
     });
   } catch (error: any) {
     console.error('Failed to verify Razorpay payment:', error);

@@ -7,32 +7,32 @@ export function ProductFeatures({ productName }: { productName: string }) {
         <div className="grid grid-cols-1 md:grid-cols-3 gap-10 md:gap-12">
           
           <div className="flex flex-col items-center text-center px-4">
-            <div className="mb-4 text-[#8C867C]">
-              <ShieldCheck className="w-6 h-6 stroke-[1.5]" />
+            <div className="mb-4 text-[#B55E5B]">
+              <ShieldCheck className="w-7 h-7 stroke-[1.5]" />
             </div>
-            <h3 className="text-[14px] font-bold text-[#252A1A] uppercase tracking-widest mb-2">Premium Quality</h3>
+            <h3 className="text-[16px] font-extrabold text-[#B55E5B] uppercase tracking-widest mb-2">Premium Quality</h3>
             <p className="text-[15px] text-[#686B59] leading-[1.6]">
-              Heavy-weight organic canvas with reinforced stitching for unparalleled durability.
+              300 GSM cotton canvas, built for lasting strength and everyday use.
             </p>
           </div>
 
           <div className="flex flex-col items-center text-center px-4">
-            <div className="mb-4 text-[#8C867C]">
-              <Droplets className="w-6 h-6 stroke-[1.5]" />
+            <div className="mb-4 text-[#B55E5B]">
+              <Droplets className="w-7 h-7 stroke-[1.5]" />
             </div>
-            <h3 className="text-[14px] font-bold text-[#252A1A] uppercase tracking-widest mb-2">Water Resistant</h3>
+            <h3 className="text-[16px] font-extrabold text-[#B55E5B] uppercase tracking-widest mb-2">Durable print</h3>
             <p className="text-[15px] text-[#686B59] leading-[1.6]">
-              Eco-friendly coating to keep your belongings safe from unexpected weather.
+              Premium DTF printing designed to stay vibrant, even after gentle hand washing.
             </p>
           </div>
 
           <div className="flex flex-col items-center text-center px-4">
-            <div className="mb-4 text-[#8C867C]">
-              <Feather className="w-6 h-6 stroke-[1.5]" />
+            <div className="mb-4 text-[#B55E5B]">
+              <Feather className="w-7 h-7 stroke-[1.5]" />
             </div>
-            <h3 className="text-[14px] font-bold text-[#252A1A] uppercase tracking-widest mb-2">Lightweight Design</h3>
+            <h3 className="text-[16px] font-extrabold text-[#B55E5B] uppercase tracking-widest mb-2">Your Design, Your Approval</h3>
             <p className="text-[15px] text-[#686B59] leading-[1.6]">
-              Designed to distribute weight evenly, ensuring comfort even on your longest days.
+              Create your design your way, we'll share it with you on WhatsApp for approval before we start printing.
             </p>
           </div>
 

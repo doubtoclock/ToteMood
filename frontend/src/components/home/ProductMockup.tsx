@@ -28,7 +28,7 @@ export function ProductMockup() {
   const footerY = useTransform(scrollYProgress, [0.7, 1], ["20px", "0px"]);
 
   return (
-    <section ref={containerRef} className="bg-[#EAECE3] h-auto md:h-[250vh] relative">
+    <section ref={containerRef} className="bg-[#EAECE3] h-auto md:h-[180vh] relative">
       {/* MOBILE LAYOUT (Static, tightly packed) */}
       <div className="flex md:hidden flex-col items-center justify-center pt-20 pb-12 w-full overflow-hidden relative">
         {/* Ambient Glows */}
@@ -66,14 +66,14 @@ export function ProductMockup() {
         {/* Footer */}
         <div className="w-full px-6 z-30 flex flex-col items-center gap-8 mt-8 border-t border-primary/20 pt-8">
           <div className="flex flex-wrap justify-center gap-6 text-xs uppercase tracking-[0.15em] font-medium text-primary/90">
-            <Link href="/shop" className="hover:text-primary transition-colors">Shop</Link>
+            <Link href="/shop" className="hover:text-primary transition-colors">Collections</Link>
             <Link href="/about" className="hover:text-primary transition-colors">About</Link>
-            <Link href="/faq" className="hover:text-primary transition-colors">FAQ</Link>
+            <Link href="/#faq" className="hover:text-primary transition-colors">FAQ</Link>
             <Link href="/contact" className="hover:text-primary transition-colors">Contact</Link>
           </div>
           <div className="flex gap-6 text-xs uppercase tracking-[0.15em] font-medium text-primary/90">
-            <a href="#" className="hover:text-primary transition-colors">Instagram</a>
-
+            <a href="https://wa.me/919890842755" target="_blank" rel="noopener noreferrer" className="hover:text-primary transition-colors">WhatsApp</a>
+            <a href="https://instagram.com/totemood_gifts" target="_blank" rel="noopener noreferrer" className="hover:text-primary transition-colors">Instagram</a>
           </div>
           <div className="text-[10px] uppercase tracking-widest text-primary/60 mt-4">
             © {new Date().getFullYear()} Totemood. All rights reserved.
@@ -146,15 +146,15 @@ export function ProductMockup() {
           className="absolute bottom-10 w-full px-12 z-30 flex flex-row justify-between items-center gap-6 border-t border-primary/20 pt-6"
         >
           <div className="flex justify-center gap-8 text-sm uppercase tracking-[0.15em] font-medium text-primary/90">
-            <Link href="/shop" className="hover:text-primary transition-colors">Shop</Link>
+            <Link href="/shop" className="hover:text-primary transition-colors">Collections</Link>
             <Link href="/about" className="hover:text-primary transition-colors">About</Link>
-            <Link href="/faq" className="hover:text-primary transition-colors">FAQ</Link>
+            <Link href="/#faq" className="hover:text-primary transition-colors">FAQ</Link>
             <Link href="/contact" className="hover:text-primary transition-colors">Contact</Link>
           </div>
 
           <div className="flex gap-8 text-sm uppercase tracking-[0.15em] font-medium text-primary/90">
-            <a href="#" className="hover:text-primary transition-colors">Instagram</a>
-
+            <a href="https://wa.me/919890842755" target="_blank" rel="noopener noreferrer" className="hover:text-primary transition-colors">WhatsApp</a>
+            <a href="https://instagram.com/totemood_gifts" target="_blank" rel="noopener noreferrer" className="hover:text-primary transition-colors">Instagram</a>
           </div>
 
           <div className="text-xs uppercase tracking-widest text-primary/60">

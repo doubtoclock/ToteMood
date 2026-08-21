@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useRef, useState } from "react";
+import React, { useRef, useState, useEffect } from "react";
 import { motion, useScroll, useTransform } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import { Container } from "@/components/layout/Container";
@@ -8,10 +8,29 @@ import Link from "next/link";
 import { ToteCanvas } from "./ToteCanvas";
 import { AmbientGlow } from "@/components/ui/AmbientGlow";
 import { ChevronLeft, ChevronRight } from "lucide-react";
+import { WebGLErrorBoundary } from "@/components/ui/WebGLErrorBoundary";
+
+function isWebGLAvailable(): boolean {
+  if (typeof window === "undefined") return false;
+  try {
+    const canvas = document.createElement("canvas");
+    return !!(
+      window.WebGLRenderingContext &&
+      (canvas.getContext("webgl") || canvas.getContext("experimental-webgl"))
+    );
+  } catch {
+    return false;
+  }
+}
 
 export function Hero() {
   const containerRef = useRef<HTMLDivElement>(null);
   const [textureIndex, setTextureIndex] = useState(0);
+  const [webglOk, setWebglOk] = useState(false);
+
+  useEffect(() => {
+    setWebglOk(isWebGLAvailable());
+  }, []);
 
   const { scrollYProgress } = useScroll({
     target: containerRef,
@@ -43,12 +62,16 @@ export function Hero() {
           shape="organic1"
         />
 
-        <div className="absolute inset-0 z-10 pointer-events-auto">
-          <ToteCanvas
-            scrollYProgress={scrollYProgress}
-            textureIndex={textureIndex}
-          />
-        </div>
+        {webglOk && (
+          <div className="absolute inset-0 z-10 pointer-events-auto">
+            <WebGLErrorBoundary>
+              <ToteCanvas
+                scrollYProgress={scrollYProgress}
+                textureIndex={textureIndex}
+              />
+            </WebGLErrorBoundary>
+          </div>
+        )}
 
         {/* Soft Vignette Overlay */}
         <div className="absolute inset-0 z-20 pointer-events-none bg-[radial-gradient(circle_at_center,transparent_40%,rgba(0,0,0,0.12)_150%)]" />

@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useRef, useState } from "react";
+import React, { useRef, useState, useEffect } from "react";
 import {
   motion,
   useScroll,
@@ -11,9 +11,28 @@ import Image from "next/image";
 import Link from "next/link";
 import { ScrollToteCanvas } from "./ScrollToteCanvas";
 import { AmbientGlow } from "@/components/ui/AmbientGlow";
+import { WebGLErrorBoundary } from "@/components/ui/WebGLErrorBoundary";
+
+function isWebGLAvailable(): boolean {
+  if (typeof window === "undefined") return false;
+  try {
+    const canvas = document.createElement("canvas");
+    return !!(
+      window.WebGLRenderingContext &&
+      (canvas.getContext("webgl") || canvas.getContext("experimental-webgl"))
+    );
+  } catch {
+    return false;
+  }
+}
 
 export function MomentsWeCarry() {
   const containerRef = useRef<HTMLDivElement>(null);
+  const [webglOk, setWebglOk] = useState(false);
+
+  useEffect(() => {
+    setWebglOk(isWebGLAvailable());
+  }, []);
 
   const { scrollYProgress } = useScroll({
     target: containerRef,
@@ -62,7 +81,7 @@ export function MomentsWeCarry() {
   const headerFadeOut = useTransform(scrollYProgress, [0.85, 0.9], [1, 0]);
 
   return (
-    <section ref={containerRef} className="relative w-full h-[450vh] bg-[#F8F6EF]">
+    <section ref={containerRef} className="relative w-full h-[250vh] md:h-[350vh] bg-[#F8F6EF]">
 
       {/* Sticky Inner Container */}
       <div className="sticky top-0 w-full h-screen overflow-hidden flex flex-col items-center justify-center">
@@ -88,7 +107,11 @@ export function MomentsWeCarry() {
         />
 
         {/* 3D R3F Layer (z-index 20) */}
-        <ScrollToteCanvas scrollYProgress={scrollYProgress} />
+        {webglOk && (
+          <WebGLErrorBoundary>
+            <ScrollToteCanvas scrollYProgress={scrollYProgress} />
+          </WebGLErrorBoundary>
+        )}
 
         {/* Header (z-index 30) */}
         <motion.div

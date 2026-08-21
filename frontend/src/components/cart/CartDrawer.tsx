@@ -2,7 +2,7 @@
 
 import { useCartStore } from "@/lib/store/useCartStore";
 import { motion, AnimatePresence } from "framer-motion";
-import { X, Minus, Plus, Trash2, ShoppingBag } from "lucide-react";
+import { X, Minus, Plus, Trash2, ShoppingBag, ArrowLeft } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
 import { useEffect } from "react";
@@ -141,16 +141,6 @@ export function CartDrawer() {
                       </div>
                     </div>
                   ))}
-                  
-                  {/* Subtle continue shopping prompt */}
-                  <div className="pt-6 pb-2">
-                    <button 
-                      onClick={closeCart}
-                      className="text-[12px] font-medium text-[#8C867C] hover:text-[#252A1A] transition-colors flex items-center gap-1.5"
-                    >
-                      Continue shopping &rarr;
-                    </button>
-                  </div>
                 </div>
               )}
             </div>
@@ -163,16 +153,24 @@ export function CartDrawer() {
                   <span className="text-[18px] font-bold text-[#252A1A]">₹{getTotal().toFixed(2)}</span>
                 </div>
                 
-                <p className="text-[12px] text-[#8C867C] mb-6">
+                <p className="text-[12px] text-[#8C867C] mb-5">
                   Shipping and taxes calculated at checkout.
                 </p>
 
-                <Link href="/checkout" onClick={closeCart} className="block w-full">
+                <Link href="/checkout" onClick={closeCart} className="block w-full mb-3">
                   <button className="w-full h-[54px] bg-[#252A1A] text-white rounded-[14px] text-[13px] font-bold uppercase tracking-[0.1em] hover:bg-[#3A3E2F] transition-colors flex items-center justify-center gap-2 group shadow-sm">
                     Proceed to checkout
                     <span className="transform group-hover:translate-x-1 transition-transform">&rarr;</span>
                   </button>
                 </Link>
+
+                <button 
+                  onClick={closeCart}
+                  className="w-full flex items-center justify-center gap-2 text-[12px] font-bold uppercase tracking-widest text-[#8C867C] hover:text-[#252A1A] transition-colors py-1"
+                >
+                  <ArrowLeft className="w-3 h-3" />
+                  Continue Shopping
+                </button>
               </div>
             )}
           </motion.div>

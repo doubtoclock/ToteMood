@@ -96,6 +96,7 @@ export function FeaturedCollection() {
                     src={product.image}
                     alt={product.name}
                     fill
+                    loading="lazy"
                     className="object-contain drop-shadow-xl"
                     sizes="(max-width: 768px) 75vw, (max-width: 1024px) 25vw, 300px"
                   />

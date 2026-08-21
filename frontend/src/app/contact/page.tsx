@@ -49,8 +49,8 @@ export default function ContactPage() {
                   <div>
                     <h3 className="font-title text-[18px] text-[#252A1A] mb-0.5">WhatsApp</h3>
                     <p className="text-[14px] text-[#686B59]">Fastest way to reach us for order approvals and queries.</p>
-                    <a href="https://wa.me/919860577458" className="text-[15px] text-[#b06161] font-bold hover:text-[#252A1A] transition-colors mt-0.5 inline-block">
-                      +91 98605 77458
+                    <a href="https://wa.me/919890842755" className="text-[15px] text-[#b06161] font-bold hover:text-[#252A1A] transition-colors mt-0.5 inline-block">
+                      +91 98908 42755
                     </a>
                   </div>
                 </div>

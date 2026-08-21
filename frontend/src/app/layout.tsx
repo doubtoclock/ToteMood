@@ -2,6 +2,8 @@ import type { Metadata } from "next";
 import localFont from "next/font/local";
 import { SmoothScroll } from "@/components/layout/SmoothScroll";
 import { Navbar } from "@/components/layout/Navbar";
+import { FloatingSocials } from "@/components/layout/FloatingSocials";
+import { Footer } from "@/components/layout/Footer";
 import "./globals.css";
 
 const agatho = localFont({
@@ -65,6 +67,11 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" className={`${agatho.variable} ${noyh.variable}`}>
+      <head>
+        <link rel="preconnect" href="https://api.fontshare.com" />
+        <link rel="preconnect" href="https://fonts.googleapis.com" />
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
+      </head>
       <body 
         className="min-h-full flex flex-col font-sans text-foreground bg-background antialiased selection:bg-accent selection:text-foreground"
         suppressHydrationWarning
@@ -72,6 +79,8 @@ export default function RootLayout({
         <SmoothScroll>
           <Navbar />
           {children}
+          <Footer />
+          <FloatingSocials />
         </SmoothScroll>
       </body>
     </html>
