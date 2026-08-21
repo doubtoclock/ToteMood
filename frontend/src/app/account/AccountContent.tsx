@@ -289,7 +289,7 @@ export function AccountContent() {
       {!accountToken ? (
         <p className="text-[14px] text-[#686B59]">Sign in with Google to see your orders.</p>
       ) : selectedOrder ? (
-        <OrderDetails order={selectedOrder} onBack={() => setSelectedOrderId(null)} />
+        OrderDetails({ order: selectedOrder, onBack: () => setSelectedOrderId(null) })
       ) : orders.length === 0 ? (
         <p className="text-[14px] text-[#686B59]">{isLoading ? "Loading orders..." : "No orders found for this account yet."}</p>
       ) : (
@@ -467,9 +467,9 @@ export function AccountContent() {
             </div>
 
             <div>
-              {activeTab === "details" && <AccountDetailsView />}
-              {activeTab === "orders" && <OrdersView />}
-              {activeTab === "addresses" && <AddressesView />}
+              {activeTab === "details" && AccountDetailsView()}
+              {activeTab === "orders" && OrdersView()}
+              {activeTab === "addresses" && AddressesView()}
             </div>
           </div>
         </div>
