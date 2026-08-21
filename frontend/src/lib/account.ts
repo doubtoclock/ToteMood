@@ -25,6 +25,7 @@ export interface SavedAddress {
 
 const ACCOUNT_PROFILE_KEY = "totemood_account_profile";
 const ACCOUNT_TOKEN_KEY = "totemood_account_token";
+export const ACCOUNT_AUTH_CHANGED_EVENT = "totemood:account-auth-changed";
 
 export const EMPTY_ACCOUNT_PROFILE: AccountProfile = {
   firstName: "",
@@ -64,12 +65,14 @@ export function saveStoredAccountSession(session: AccountSession) {
   if (typeof window === "undefined") return;
   window.localStorage.setItem(ACCOUNT_TOKEN_KEY, session.token);
   saveStoredAccountProfile(session.user);
+  window.dispatchEvent(new Event(ACCOUNT_AUTH_CHANGED_EVENT));
 }
 
 export function clearStoredAccountProfile() {
   if (typeof window === "undefined") return;
   window.localStorage.removeItem(ACCOUNT_PROFILE_KEY);
   window.localStorage.removeItem(ACCOUNT_TOKEN_KEY);
+  window.dispatchEvent(new Event(ACCOUNT_AUTH_CHANGED_EVENT));
 }
 
 export function accountAuthHeaders(): Record<string, string> {

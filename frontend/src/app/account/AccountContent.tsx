@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import Image from "next/image";
 import { Section } from "@/components/layout/Section";
 import { AmbientGlow } from "@/components/ui/AmbientGlow";
@@ -9,14 +9,11 @@ import { loadGoogleIdentity, renderGoogleSignInButton } from "@/lib/googleSignIn
 import {
   AccountProfile,
   AccountSession,
-  EMPTY_ACCOUNT_PROFILE,
   SavedAddress,
   accountAuthHeaders,
-  clearStoredAccountProfile,
-  getStoredAccountToken,
   getStoredAccountProfile,
-  saveStoredAccountSession,
 } from "@/lib/account";
+import { useAuthStore } from "@/lib/store/useAuthStore";
 import { MapPin, Package, Plus, Trash2, User } from "lucide-react";
 
 type AccountTab = "details" | "orders" | "addresses";
@@ -88,8 +85,11 @@ function prettyStatus(status: string) {
 export function AccountContent() {
   const [googleButtonNode, setGoogleButtonNode] = useState<HTMLDivElement | null>(null);
   const [activeTab, setActiveTab] = useState<AccountTab>("details");
-  const [profile, setProfile] = useState<AccountProfile>(() => getStoredAccountProfile());
-  const [accountToken, setAccountToken] = useState(() => getStoredAccountToken());
+  const profile = useAuthStore((state) => state.profile);
+  const accountToken = useAuthStore((state) => state.token);
+  const hydrateAuth = useAuthStore((state) => state.hydrate);
+  const signIn = useAuthStore((state) => state.signIn);
+  const signOut = useAuthStore((state) => state.signOut);
   const [orders, setOrders] = useState<AccountOrder[]>([]);
   const [addresses, setAddresses] = useState<SavedAddress[]>([]);
   const [selectedOrderId, setSelectedOrderId] = useState<string | null>(null);
@@ -108,20 +108,22 @@ export function AccountContent() {
     [orders.length]
   );
 
-  const handleGoogleCredential = async (credential: string) => {
+  useEffect(() => {
+    hydrateAuth();
+  }, [hydrateAuth]);
+
+  const handleGoogleCredential = useCallback(async (credential: string) => {
     try {
       const session = await apiFetch<AccountSession>("/api/auth/google", {
         method: "POST",
         body: JSON.stringify({ credential }),
       });
-      saveStoredAccountSession(session);
-      setAccountToken(session.token);
-      setProfile(session.user);
+      signIn(session);
       setMessage("Signed in with Google.");
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Google sign-in failed.");
     }
-  };
+  }, [signIn]);
 
   useEffect(() => {
     if (!GOOGLE_CLIENT_ID || accountToken || !googleButtonNode) return;
@@ -135,12 +137,14 @@ export function AccountContent() {
     return () => {
       cancelled = true;
     };
-  }, [googleButtonNode, accountToken]);
+  }, [googleButtonNode, accountToken, handleGoogleCredential]);
 
   useEffect(() => {
     if (!accountToken) {
-      setOrders([]);
-      setAddresses([]);
+      queueMicrotask(() => {
+        setOrders([]);
+        setAddresses([]);
+      });
       return;
     }
 
@@ -454,8 +458,7 @@ export function AccountContent() {
               <div className="hidden lg:block h-px bg-[#E8E5DC] my-3" />
               <button
                 onClick={() => {
-                  clearStoredAccountProfile();
-                  setProfile(EMPTY_ACCOUNT_PROFILE);
+                  signOut();
                   setOrders([]);
                   setAddresses([]);
                   setMessage("Account profile cleared on this browser.");

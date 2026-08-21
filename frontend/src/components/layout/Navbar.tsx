@@ -8,36 +8,36 @@ import Image from "next/image";
 import { motion, useScroll, useMotionValueEvent } from "framer-motion";
 import { MobileMenu } from "./MobileMenu";
 import { useCartStore } from "@/lib/store/useCartStore";
+import { useAuthStore } from "@/lib/store/useAuthStore";
 import { CartDrawer } from "@/components/cart/CartDrawer";
-import { getStoredAccountProfile, clearStoredAccountProfile, type AccountProfile } from "@/lib/account";
+import { ACCOUNT_AUTH_CHANGED_EVENT } from "@/lib/account";
 
 export function Navbar() {
   const [isScrolled, setIsScrolled] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
-  const [profile, setProfile] = useState<AccountProfile | null>(null);
+  const profile = useAuthStore((state) => (state.profile.email ? state.profile : null));
+  const hydrateAuth = useAuthStore((state) => state.hydrate);
+  const signOut = useAuthStore((state) => state.signOut);
   const { toggleCart, getItemCount } = useCartStore();
   const { scrollY } = useScroll();
   const pathname = usePathname();
 
   useEffect(() => {
-    const stored = getStoredAccountProfile();
-    setProfile(stored.email ? stored : null);
-    const onStorage = () => {
-      const updated = getStoredAccountProfile();
-      setProfile(updated.email ? updated : null);
-    };
+    hydrateAuth();
+    const onStorage = () => hydrateAuth();
     window.addEventListener("storage", onStorage);
-    return () => window.removeEventListener("storage", onStorage);
-  }, []);
+    window.addEventListener(ACCOUNT_AUTH_CHANGED_EVENT, onStorage);
+    return () => {
+      window.removeEventListener("storage", onStorage);
+      window.removeEventListener(ACCOUNT_AUTH_CHANGED_EVENT, onStorage);
+    };
+  }, [hydrateAuth]);
 
   useMotionValueEvent(scrollY, "change", (latest) => {
     setIsScrolled(latest > 20);
   });
 
-  const handleLogout = () => {
-    clearStoredAccountProfile();
-    setProfile(null);
-  };
+  const handleLogout = signOut;
 
   if (pathname?.startsWith("/admin")) {
     return null;

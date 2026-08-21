@@ -3,10 +3,10 @@
 import { motion, AnimatePresence } from "framer-motion";
 import Link from "next/link";
 import { X, LogOut } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 import { usePathname } from "next/navigation";
 import Image from "next/image";
-import { getStoredAccountProfile, clearStoredAccountProfile, type AccountProfile } from "@/lib/account";
+import { useAuthStore } from "@/lib/store/useAuthStore";
 
 interface MobileMenuProps {
   isOpen: boolean;
@@ -15,24 +15,24 @@ interface MobileMenuProps {
 
 export function MobileMenu({ isOpen, onClose }: MobileMenuProps) {
   const pathname = usePathname();
-  const [profile, setProfile] = useState<AccountProfile | null>(null);
+  const profile = useAuthStore((state) => (state.profile.email ? state.profile : null));
+  const hydrateAuth = useAuthStore((state) => state.hydrate);
+  const signOut = useAuthStore((state) => state.signOut);
 
   useEffect(() => {
     if (isOpen) {
       document.body.style.overflow = "hidden";
-      const stored = getStoredAccountProfile();
-      setProfile(stored.email ? stored : null);
+      hydrateAuth();
     } else {
       document.body.style.overflow = "";
     }
     return () => {
       document.body.style.overflow = "";
     };
-  }, [isOpen]);
+  }, [hydrateAuth, isOpen]);
 
   const handleLogout = () => {
-    clearStoredAccountProfile();
-    setProfile(null);
+    signOut();
     onClose();
   };
 
