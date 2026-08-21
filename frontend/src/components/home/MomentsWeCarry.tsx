@@ -58,8 +58,11 @@ export function MomentsWeCarry() {
     [0, 0.15],
     ["-8deg", "0deg"],
   );
-  const headerOpacity = useTransform(scrollYProgress, [0, 0.1], [0, 1]);
-  const headerY = useTransform(scrollYProgress, [0, 0.1], ["20px", "0px"]);
+  const headerOpacity = useTransform(scrollYProgress, [0.15, 0.25], [0, 1]);
+  const headerY = useTransform(scrollYProgress, [0.15, 0.25], ["20px", "0px"]);
+  const textOpacity = useTransform(scrollYProgress, [0.2, 0.3], [0, 1]);
+  const textY = useTransform(scrollYProgress, [0.2, 0.3], ["20px", "0px"]);
+  const scrollCueOpacity = useTransform(scrollYProgress, [0, 0.15], [1, 0], { clamp: true });
 
   // 20-45%: Mask reveal (Original -> Illustration)
   const maskProgress = useTransform(scrollYProgress, [0.2, 0.45], [0, 100]);
@@ -81,8 +84,10 @@ export function MomentsWeCarry() {
   const headerFadeOut = useTransform(scrollYProgress, [0.85, 0.9], [1, 0]);
 
   return (
-    <section ref={containerRef} className="relative w-full h-[250vh] md:h-[350vh] bg-[#F8F6EF]">
-
+    <section
+      ref={containerRef}
+      className="relative w-full h-[250vh] md:h-[350vh] bg-[#F8F6EF]"
+    >
       {/* Sticky Inner Container */}
       <div className="sticky top-0 w-full h-screen overflow-hidden flex flex-col items-center justify-center">
         {/* Subtle paper grain background */}
@@ -108,30 +113,44 @@ export function MomentsWeCarry() {
 
         {/* 3D R3F Layer (z-index 20) */}
         {webglOk && (
-          <WebGLErrorBoundary>
-            <ScrollToteCanvas scrollYProgress={scrollYProgress} />
-          </WebGLErrorBoundary>
+          <div className="absolute inset-0 z-20 -translate-y-[8vh] md:translate-y-0 pointer-events-none">
+            <WebGLErrorBoundary>
+              <ScrollToteCanvas scrollYProgress={scrollYProgress} />
+            </WebGLErrorBoundary>
+          </div>
         )}
 
         {/* Header (z-index 30) */}
-        <motion.div
-          className="absolute top-8 md:top-16 left-0 w-full flex flex-col items-center text-center z-30 px-6"
-          style={{ opacity: headerOpacity, y: headerY }}
-        >
-          <motion.div style={{ opacity: headerFadeOut }}>
-            <h2 className="text-3xl md:text-5xl font-serif text-[#1C1C1A] tracking-tight mb-4">
+        <div className="absolute top-[76px] md:top-[88px] left-0 w-full flex flex-col items-center text-center z-30 px-6 pointer-events-none">
+          <motion.div style={{ opacity: headerFadeOut }} className="flex flex-col items-center">
+            <motion.h2 
+              className="text-[40px] md:text-[48px] font-heading text-[#1C1C1A] tracking-tight mb-4 leading-tight font-light"
+              style={{ opacity: headerOpacity, y: headerY }}
+            >
               From your photo to a Timeless Tote
-            </h2>
-            <p className="text-lg text-[#5A5A55] max-w-[500px] mx-auto">
-              Every detail is meticulously crafted. Watch your memory transform
-              into wearable art.
-            </p>
+            </motion.h2>
           </motion.div>
+        </div>
+
+        {/* Scroll Cue (z-[5]) */}
+        <motion.div
+          className="absolute inset-0 z-[5] flex items-center justify-center pointer-events-none -translate-y-[8vh] md:translate-y-0"
+          style={{ opacity: scrollCueOpacity }}
+        >
+          <div className="flex flex-col items-center gap-3 mb-[15vh]">
+            <span className="text-[10px] md:text-xs tracking-[0.3em] font-sans font-medium text-[#5A5A55] uppercase">
+              Scroll To Explore
+            </span>
+            <div className="flex flex-col items-center">
+              <div className="w-[1px] h-12 bg-[#5A5A55]/50" />
+              <div className="w-1.5 h-1.5 rounded-full bg-[#5A5A55]/80 mt-1" />
+            </div>
+          </div>
         </motion.div>
 
         {/* 2D Photo/Illustration Layers (z-index 10) */}
         <motion.div
-          className="absolute inset-0 z-10 flex items-center justify-center pointer-events-none"
+          className="absolute inset-0 z-10 flex items-center justify-center pointer-events-none -translate-y-[8vh] md:translate-y-0"
           style={{
             y: artworkY,
             scale: artworkScale,
@@ -187,15 +206,15 @@ export function MomentsWeCarry() {
           </motion.div>
         </motion.div>
 
-        {/* Persistent CTA (Right Column) (z-index 30) */}
-        <div className="absolute right-0 lg:left-[calc(50%+200px)] lg:right-auto w-full lg:w-[calc(50vw-200px)] h-full flex flex-col items-center lg:items-start justify-end lg:justify-center pb-8 md:pb-12 lg:pb-0 px-6 lg:px-12 z-30 pointer-events-auto">
-          <div className="w-full max-w-[420px] text-center lg:text-left">
-            <h3 className="text-3xl md:text-5xl lg:text-[60px] font-serif text-[#1C1C1A] mb-8 lg:mb-10 leading-[1.05]">
+        {/* Persistent CTA (z-index 30) */}
+        <div className="absolute right-0 lg:left-[calc(50%+200px)] lg:right-auto w-full lg:w-[calc(50vw-200px)] h-full flex flex-col items-center lg:items-start justify-end lg:justify-center pb-[2vh] md:pb-12 lg:pb-0 px-6 lg:px-12 z-30 pointer-events-auto">
+          <div className="w-full max-w-[460px] text-center lg:text-left">
+            <h3 className="text-[44px] md:text-[64px] lg:text-[72px] font-heading font-light text-[#1C1C1A] mb-[20px] lg:mb-[40px] leading-[0.95] tracking-tight">
               Every memory
               <br className="hidden lg:block" /> deserves to be
               <br className="hidden lg:block" /> carried.
             </h3>
-            <Link href="/shop" className="bg-[#1C1C1A] text-white w-[200px] h-[60px] rounded-full font-medium tracking-wide hover:bg-black transition-colors duration-300 mx-auto lg:mx-0 flex items-center justify-center">
+            <Link href="/shop" className="bg-[#1C1C1A] text-white w-[180px] h-[56px] lg:w-[230px] lg:h-[68px] rounded-full font-sans font-medium text-base tracking-[0.05em] hover:bg-black transition-colors duration-300 mx-auto lg:mx-0 flex items-center justify-center shadow-lg">
               Create Yours
             </Link>
           </div>
@@ -231,12 +250,12 @@ export function MomentsWeCarry() {
                     transition={{ duration: 0.35, ease: "easeOut" }}
                   />
                   <motion.span
-                    className="text-xs md:text-[14px] tracking-[0.15em] uppercase"
+                    className="text-[16px] tracking-[0.12em] uppercase font-sans"
                     initial={false}
                     animate={{
                       color: isActive ? "#1C1C1A" : "#8C867C",
-                      x: isActive ? 0 : -4,
-                      fontWeight: isActive ? 600 : 500,
+                      x: isActive ? 0 : -2,
+                      fontWeight: isActive ? 500 : 400,
                     }}
                     transition={{ duration: 0.35, ease: "easeOut" }}
                   >

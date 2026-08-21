@@ -36,7 +36,7 @@ export default function ProductPage() {
   }
 
   return (
-    <main className="min-h-screen bg-[#F8F6EF] pt-20 md:pt-24 relative overflow-hidden">
+    <main className="min-h-screen bg-[#F8F6EF] pt-0 relative overflow-hidden">
       <ScrollToTop />
       {/* Background Ambience for top section */}
       <AmbientGlow
@@ -66,7 +66,7 @@ export default function ProductPage() {
         <ProductFeatures productName={product.name} />
 
         {/* 3. Customer Reviews */}
-        <ProductReviews />
+        <ProductReviews productId={product.id} />
 
         {/* 4. Frequently Asked Questions */}
         <ProductFAQ />

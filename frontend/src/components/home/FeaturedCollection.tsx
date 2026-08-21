@@ -12,7 +12,7 @@ export function FeaturedCollection() {
   const featuredProducts = products.slice(0, 4);
 
   return (
-    <section className="relative w-full py-24 lg:py-32 bg-[#EBE7DF] overflow-hidden">
+    <section id="post-scroll-section" className="relative w-full py-24 lg:py-32 bg-[#EBE7DF] overflow-hidden">
       {/* Subtle Texture */}
       <div
         className="absolute inset-0 pointer-events-none opacity-[0.015]"

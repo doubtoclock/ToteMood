@@ -2,6 +2,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { Container } from "@/components/layout/Container";
 import { Section } from "@/components/layout/Section";
+import { HowItStartedScroll } from "@/components/about/HowItStartedScroll";
 
 export const metadata = {
   title: "About Us | Totemood",
@@ -88,42 +89,7 @@ export default function AboutPage() {
       </Section>
 
       {/* 3. Visual Rhythm: How It Started */}
-      <Section className="py-24 md:py-32">
-        <Container>
-          <div className="flex flex-col lg:flex-row items-center justify-between gap-16 lg:gap-20">
-            {/* Left Column: Image (50%) */}
-            <div className="w-full lg:w-1/2">
-              <div className="relative w-full aspect-[4/3] rounded-[24px] overflow-hidden border border-[#E8E5DC]">
-                <Image 
-                  src="/images/original_photo.png" 
-                  alt="The beginning of Totemood" 
-                  fill 
-                  className="object-cover"
-                  sizes="(max-width: 1024px) 100vw, 50vw"
-                />
-              </div>
-            </div>
-
-            {/* Right Column: Text (45%) */}
-            <div className="w-full lg:w-[45%]">
-              <h2 className="text-[32px] md:text-[42px] font-title text-[#252A1A] mb-6">
-                How It Started
-              </h2>
-              <div className="space-y-6 text-[18px] text-[#5A5A55] leading-[1.7]">
-                <p>
-                  It began with a simple desire: to make something by hand that meant something to someone. The first pieces were created at a small desk, fueled by a passion for design and a deep appreciation for human connection.
-                </p>
-                <p>
-                  What started as a personal creative outlet quickly resonated with people who were looking for ways to express love without relying on mass-produced goods. Slowly, carefully, Totemood grew into a dedicated studio.
-                </p>
-                <p>
-                  Today, every piece we craft still carries that original intention. We don't just process orders; we carefully assemble the fragments of your stories into art you can hold.
-                </p>
-              </div>
-            </div>
-          </div>
-        </Container>
-      </Section>
+      <HowItStartedScroll />
 
       {/* 4. Emotional Finish & CTA */}
       <Section className="py-32 md:py-40 bg-[#F5F3EC] border-y border-[#E8E5DC]">

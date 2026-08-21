@@ -46,8 +46,9 @@ export function Hero() {
       ref={containerRef}
       className="relative w-full h-[100svh] overflow-hidden"
       style={{
-        backgroundColor: '#F8F7F3',
-        backgroundImage: 'radial-gradient(ellipse at center, rgba(110,122,83,.18), transparent 70%)'
+        backgroundColor: "#F8F7F3",
+        backgroundImage:
+          "radial-gradient(ellipse at center, rgba(110,122,83,.18), transparent 70%)",
       }}
     >
       {/* 3D Canvas Background */}
@@ -108,10 +109,9 @@ export function Hero() {
             transition={{ duration: 0.8, ease: [0.16, 1, 0.3, 1], delay: 0.4 }}
             className="mt-8 md:mt-12 text-lg md:text-xl text-foreground/80 font-sans leading-relaxed max-w-[440px]"
           >
-            Customize your best memories into your gift which you can gift to your friends, partner, family.
+            Customize your best memories into your gift which you can gift to
+            your friends, partner, family.
           </motion.p>
-
-
         </motion.div>
       </Container>
 

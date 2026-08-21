@@ -17,7 +17,12 @@ export const products: Product[] = [
   {
     id: "ghibli-art-tote",
     name: "CUSTOM GHIBLI ART TOTE BAG",
-    description: "Bag will have custom Ghibli image only. Add size and approval on WhatsApp after placing orders.",
+    description: `Get your favorite Ghibli art printed on a strong, high-quality canvas tote bag.
+It is perfect for daily use, college, shopping, or as a gift for anime lovers.
+The fabric is easy to wash and the beautiful print stays bright for a long time.
+Carry this bag everywhere and show off a cute design that is made just for you.
+
+Add size and approval on WhatsApp after placing orders.`,
     price: 499,
     oldPrice: 599,
     originalPrice: 599,
@@ -36,7 +41,12 @@ export const products: Product[] = [
   {
     id: "ghibli-text-tote",
     name: "CUSTOM GHIBLI TOTE BAG WITH TEXT",
-    description: "Custom Ghibli image + custom text. Add size and approval on WhatsApp after placing orders.",
+    description: `Get your favorite Ghibli art and custom text printed on a strong canvas tote bag.
+It is perfect for daily use, college, shopping, or as a gift for anime lovers.
+The fabric is easy to wash and the beautiful print stays bright for a long time.
+Add your own name or quote to make this cute bag totally unique to you.
+
+Add size and approval on WhatsApp after placing orders.`,
     price: 599,
     oldPrice: 749,
     originalPrice: 749,
@@ -55,7 +65,12 @@ export const products: Product[] = [
   {
     id: "emoji-ghibli-tote",
     name: "CUTE EMOJI WITH GHIBLI TOTE",
-    description: "Emoji and text around Ghibli bags. Add size and approval on WhatsApp after placing orders.",
+    description: `Mix your favorite Ghibli art with cute emojis on a strong canvas tote bag.
+It is perfect for daily use, college, shopping, or as a gift for anime lovers.
+The fabric is easy to wash and the beautiful print stays bright for a long time.
+Carry this bag everywhere and show off a fun design that is made just for you.
+
+Add size and approval on WhatsApp after placing orders.`,
     price: 599,
     oldPrice: 719,
     originalPrice: 719,
@@ -74,7 +89,12 @@ export const products: Product[] = [
   {
     id: "polaroid-tote",
     name: "POLAROID TOTE BAG",
-    description: "Old vintage type Polaroid design. Add size and approval on WhatsApp after placing orders.",
+    description: `Print your own photos in a cool vintage Polaroid style on a strong canvas tote bag.
+It is perfect for daily use, college, shopping, or gifting memories to loved ones.
+The fabric is easy to wash and your photos will stay clear for a long time.
+Carry this bag everywhere and keep your favorite moments close to you.
+
+Add size and approval on WhatsApp after placing orders.`,
     price: 499,
     oldPrice: 599,
     originalPrice: 599,
@@ -93,7 +113,12 @@ export const products: Product[] = [
   {
     id: "any-design-tote",
     name: "ANY DESIGN TOTE BAG",
-    description: "Customer can customise any ready to print design. Add size and approval on WhatsApp after placing orders.",
+    description: `Print absolutely any picture, design, or logo you want on a strong canvas tote bag.
+It is perfect for daily use, college, small businesses, or a special custom gift.
+The fabric is easy to wash and your custom print stays bright for a long time.
+Carry this bag everywhere and wear a design that you created yourself.
+
+Add size and approval on WhatsApp after placing orders.`,
     price: 499,
     oldPrice: 599,
     originalPrice: 599,

@@ -14,7 +14,7 @@ import {
   getStoredAccountProfile,
 } from "@/lib/account";
 import { useAuthStore } from "@/lib/store/useAuthStore";
-import { MapPin, Package, Plus, Trash2, User } from "lucide-react";
+import { MapPin, Package, Plus, Trash2, User, LogOut } from "lucide-react";
 
 type AccountTab = "details" | "orders" | "addresses";
 
@@ -98,6 +98,7 @@ export function AccountContent() {
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [message, setMessage] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+  const [showLogoutModal, setShowLogoutModal] = useState(false);
 
   const accountEmail = profile.email.trim().toLowerCase();
   const selectedOrder = orders.find((order) => order.id === selectedOrderId) || null;
@@ -457,15 +458,11 @@ export function AccountContent() {
               })}
               <div className="hidden lg:block h-px bg-[#E8E5DC] my-3" />
               <button
-                onClick={() => {
-                  signOut();
-                  setOrders([]);
-                  setAddresses([]);
-                  setMessage("Account profile cleared on this browser.");
-                }}
-                className="text-left px-4 py-2 rounded-[12px] text-[#b06161] hover:bg-red-50 transition-all shrink-0 lg:shrink-auto"
+                onClick={() => setShowLogoutModal(true)}
+                className="flex items-center gap-3 px-4 py-2 rounded-[12px] text-[#b06161] hover:bg-red-50 font-medium transition-all shrink-0 lg:shrink-auto"
               >
-                Clear account
+                <LogOut size={18} strokeWidth={1.5} />
+                Log out
               </button>
             </div>
 
@@ -477,6 +474,38 @@ export function AccountContent() {
           </div>
         </div>
       </Section>
+
+      {/* Logout Confirmation Modal */}
+      {showLogoutModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm">
+          <div className="bg-white rounded-[24px] p-8 max-w-[400px] w-full shadow-2xl border border-[#E8E5DC]">
+            <h3 className="text-[20px] font-title text-[#252A1A] mb-3">Log Out</h3>
+            <p className="text-[15px] text-[#5A5A55] mb-8">
+              Are you sure you want to log out of your account? You will need to sign back in to view your orders.
+            </p>
+            <div className="flex gap-3">
+              <button
+                onClick={() => setShowLogoutModal(false)}
+                className="flex-1 border border-[#E8E5DC] h-[46px] rounded-[14px] text-[12px] font-bold uppercase tracking-widest text-[#686B59] hover:bg-[#F5F3EC]/50 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => {
+                  setShowLogoutModal(false);
+                  signOut();
+                  setOrders([]);
+                  setAddresses([]);
+                  setMessage("You have been logged out.");
+                }}
+                className="flex-1 bg-[#b06161] text-white h-[46px] rounded-[14px] text-[12px] font-bold uppercase tracking-widest hover:bg-[#9a5454] transition-colors"
+              >
+                Log Out
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       <style dangerouslySetInnerHTML={{ __html: `
         .hide-scrollbar::-webkit-scrollbar { display: none; }
