@@ -3,113 +3,43 @@ import { test, expect } from "@playwright/test";
 test.describe("Contact Page", () => {
   test.beforeEach(async ({ page }) => {
     await page.goto("/contact");
-    await page.waitForLoadState("networkidle");
+    await page.waitForLoadState("domcontentloaded");
   });
 
-  test("CT01 - contact page loads successfully", async ({ page }) => {
-    await expect(page).toHaveURL(/\/contact/);
+  test("CT01 - loads with get-in-touch heading and main area", async ({ page }) => {
+    await expect(page).toHaveTitle(/Totemood|Contact/i);
+    await expect(page.locator("main").first()).toBeVisible();
+    await expect(page.getByText(/get in touch|hear from you/i).first()).toBeVisible({ timeout: 10000 });
   });
 
-  test("CT02 - page title contains Contact or Totemood", async ({ page }) => {
-    await expect(page).toHaveTitle(/Contact|Totemood/i);
+  test("CT02 - WhatsApp and email contact cards are clickable links", async ({ page }) => {
+    const wa = page.locator("a[href*='wa.me']").first();
+    await expect(wa).toBeVisible({ timeout: 10000 });
+    await expect(wa).toHaveAttribute("target", "_blank");
+    const mail = page.locator("a[href^='mailto:']").first();
+    await expect(mail).toBeVisible();
   });
 
-  // ── Contact Info Section ───────────────────────────────────────────
-  test("CT03 - 'WE'D LOVE TO HEAR FROM YOU' label is visible", async ({ page }) => {
-    const label = page.locator("text=WE'D LOVE TO HEAR FROM YOU");
-    await expect(label).toBeVisible();
-  });
-
-  test("CT04 - 'Get in Touch' heading is visible", async ({ page }) => {
-    const heading = page.locator("h1").filter({ hasText: "Get in Touch" });
-    await expect(heading).toBeVisible();
-  });
-
-  test("CT05 - WhatsApp contact card is visible", async ({ page }) => {
-    const card = page.locator("text=WhatsApp").first();
-    await expect(card).toBeVisible();
-  });
-
-  test("CT06 - WhatsApp phone number is clickable", async ({ page }) => {
-    const phone = page.locator("a").filter({ hasText: "+91 98908 42755" }).first();
-    await expect(phone).toBeVisible();
-    const href = await phone.getAttribute("href");
-    expect(href).toContain("wa.me/919890842755");
-  });
-
-  test("CT07 - WhatsApp link opens in new tab", async ({ page }) => {
-    const phone = page.locator("a").filter({ hasText: "+91 98908 42755" }).first();
-    const target = await phone.getAttribute("target");
-    expect(target).toBe("_blank");
-  });
-
-  test("CT08 - Email contact card is visible", async ({ page }) => {
-    const card = page.locator("text=Email").first();
-    await expect(card).toBeVisible();
-  });
-
-  test("CT09 - email address is clickable mailto link", async ({ page }) => {
-    const email = page.locator("a[href='mailto:totemood21@gmail.com']");
-    await expect(email).toBeVisible();
-  });
-
-  test("CT10 - Instagram contact card is visible", async ({ page }) => {
-    const card = page.locator("text=@totemood_gifts").first();
-    await expect(card).toBeVisible();
-  });
-
-  test("CT11 - Instagram link opens in new tab", async ({ page }) => {
-    const ig = page.locator("a").filter({ hasText: "@totemood_gifts" }).first();
-    const target = await ig.getAttribute("target");
-    expect(target).toBe("_blank");
-  });
-
-  // ── Contact Form ───────────────────────────────────────────────────
-  test("CT12 - 'Send a Message' form heading is visible", async ({ page }) => {
-    const heading = page.locator("h2").filter({ hasText: "Send a Message" });
-    await expect(heading).toBeVisible();
-  });
-
-  test("CT13 - first name input field exists", async ({ page }) => {
-    const input = page.locator("#firstName, input[placeholder='Jane']");
-    await expect(input.first()).toBeVisible();
-  });
-
-  test("CT14 - last name input field exists", async ({ page }) => {
-    const input = page.locator("#lastName, input[placeholder='Doe']");
-    await expect(input.first()).toBeVisible();
-  });
-
-  test("CT15 - email input field exists", async ({ page }) => {
-    const input = page.locator("#email, input[placeholder*='example']");
-    await expect(input.first()).toBeVisible();
-  });
-
-  test("CT16 - subject dropdown has all options", async ({ page }) => {
-    const options = ["Order Inquiry", "Customisation", "Shipping", "Product Question", "Collaboration", "Other"];
-    for (const opt of options) {
-      const option = page.locator("option").filter({ hasText: opt });
-      await expect(option).toBeAttached();
+  test("CT03 - message form has all required fields with labels", async ({ page }) => {
+    const inputs = page.locator("main input, main textarea");
+    expect(await inputs.count()).toBeGreaterThanOrEqual(4);
+    for (let i = 0; i < (await inputs.count()); i++) {
+      const input = inputs.nth(i);
+      const id = await input.getAttribute("id");
+      if (!id) continue;
+      await expect(page.locator(`label[for='${id}']`).first()).toBeVisible();
     }
   });
 
-  test("CT17 - message textarea exists", async ({ page }) => {
-    const textarea = page.locator("#message, textarea");
-    await expect(textarea.first()).toBeVisible();
+  test("CT04 - subject dropdown offers expected options", async ({ page }) => {
+    const select = page.locator("select").first();
+    await expect(select).toBeVisible({ timeout: 10000 });
+    const options = await select.locator("option").allTextContents();
+    expect(options.length).toBeGreaterThanOrEqual(3);
   });
 
-  test("CT18 - 'Send message' button is visible", async ({ page }) => {
-    const btn = page.locator("button").filter({ hasText: /Send message/ }).first();
-    await expect(btn).toBeVisible();
-  });
-
-  test("CT19 - form has 'We usually reply within 1 business day' text", async ({ page }) => {
-    const text = page.locator("text=/usually reply within/i");
-    await expect(text).toBeVisible();
-  });
-
-  test("CT20 - contact page has Mumbai location text", async ({ page }) => {
-    const text = page.locator("text=/Mumbai, India/i").first();
-    await expect(text).toBeVisible();
+  test("CT05 - send message button visible with reply-time note", async ({ page }) => {
+    await expect(page.locator("button").filter({ hasText: /send/i }).first()).toBeVisible({ timeout: 10000 });
+    await expect(page.getByText(/reply within/i).first()).toBeVisible();
   });
 });

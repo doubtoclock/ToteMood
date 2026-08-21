@@ -62,6 +62,7 @@ export function CartDrawer() {
               </div>
               <button 
                 onClick={closeCart}
+                aria-label="Close cart"
                 className="p-2 hover:bg-[#E8E5DC]/50 rounded-full transition-colors text-[#252A1A]"
               >
                 <X className="w-4 h-4" strokeWidth={1.5} />
@@ -108,6 +109,7 @@ export function CartDrawer() {
                           </div>
                           <button 
                             onClick={() => removeItem(item.product.id)}
+                            aria-label={`Remove ${item.product.name}`}
                             className="text-[#8C867C] hover:text-[#b06161] transition-colors p-1"
                           >
                             <Trash2 className="w-[14px] h-[14px]" strokeWidth={1.5} />
@@ -119,6 +121,7 @@ export function CartDrawer() {
                           <div className="flex items-center border border-[#E8E5DC] rounded-[8px] h-[34px] bg-white">
                             <button 
                               onClick={() => updateQuantity(item.product.id, item.quantity - 1)}
+                              aria-label={`Decrease ${item.product.name} quantity`}
                               className="w-8 h-full flex items-center justify-center text-[#252A1A] hover:bg-[#F5F3EC] rounded-l-[8px] transition-colors"
                             >
                               <Minus className="w-[10px] h-[10px]" strokeWidth={2} />
@@ -128,6 +131,7 @@ export function CartDrawer() {
                             </span>
                             <button 
                               onClick={() => updateQuantity(item.product.id, item.quantity + 1)}
+                              aria-label={`Increase ${item.product.name} quantity`}
                               className="w-8 h-full flex items-center justify-center text-[#252A1A] hover:bg-[#F5F3EC] rounded-r-[8px] transition-colors"
                             >
                               <Plus className="w-[10px] h-[10px]" strokeWidth={2} />
