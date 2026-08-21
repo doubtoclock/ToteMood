@@ -3,7 +3,7 @@
 import { motion, AnimatePresence } from "framer-motion";
 import Link from "next/link";
 import { X, LogOut } from "lucide-react";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { usePathname } from "next/navigation";
 import Image from "next/image";
 import { useAuthStore } from "@/lib/store/useAuthStore";
@@ -14,6 +14,7 @@ interface MobileMenuProps {
 }
 
 export function MobileMenu({ isOpen, onClose }: MobileMenuProps) {
+  const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
   const pathname = usePathname();
   const profile = useAuthStore((state) => (state.profile.email ? state.profile : null));
   const hydrateAuth = useAuthStore((state) => state.hydrate);
@@ -33,6 +34,7 @@ export function MobileMenu({ isOpen, onClose }: MobileMenuProps) {
 
   const handleLogout = () => {
     signOut();
+    setShowLogoutConfirm(false);
     onClose();
   };
 
@@ -120,7 +122,7 @@ export function MobileMenu({ isOpen, onClose }: MobileMenuProps) {
                      Account
                    </Link>
                    <button
-                     onClick={handleLogout}
+                     onClick={() => setShowLogoutConfirm(true)}
                      className="flex items-center gap-1.5 font-sans text-sm font-medium text-[#b06161] hover:text-[#252A1A] transition-colors"
                    >
                      <LogOut className="w-3.5 h-3.5" strokeWidth={1.5} />
@@ -152,6 +154,30 @@ export function MobileMenu({ isOpen, onClose }: MobileMenuProps) {
                </div>
             </div>
           </motion.div>
+          {showLogoutConfirm && (
+            <div className="fixed inset-0 z-[80] flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm">
+              <div className="bg-white rounded-[24px] p-7 w-full max-w-[360px] shadow-2xl border border-[#E8E5DC]">
+                <h3 className="text-[20px] font-title text-[#252A1A] mb-3">Log out?</h3>
+                <p className="text-[14px] text-[#5A5A55] mb-7 leading-relaxed">
+                  Are you sure you want to log out of your Totemood account?
+                </p>
+                <div className="flex gap-3">
+                  <button
+                    onClick={() => setShowLogoutConfirm(false)}
+                    className="flex-1 border border-[#E8E5DC] h-[44px] rounded-[14px] text-[12px] font-bold uppercase tracking-widest text-[#686B59] hover:bg-[#F5F3EC]/50 transition-colors"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={handleLogout}
+                    className="flex-1 bg-[#b06161] text-white h-[44px] rounded-[14px] text-[12px] font-bold uppercase tracking-widest hover:bg-[#9a5454] transition-colors"
+                  >
+                    Log out
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
         </>
       )}
     </AnimatePresence>

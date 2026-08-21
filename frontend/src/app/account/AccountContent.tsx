@@ -79,7 +79,7 @@ function formatDate(date: string) {
 }
 
 function prettyStatus(status: string) {
-  return status.toLowerCase().replace(/^\w/, (letter) => letter.toUpperCase());
+  return status.replace(/_/g, " ");
 }
 
 export function AccountContent() {
@@ -120,7 +120,7 @@ export function AccountContent() {
         body: JSON.stringify({ credential }),
       });
       signIn(session);
-      setMessage("Signed in with Google.");
+      setMessage("Successfully logged in.");
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Google sign-in failed.");
     }
@@ -172,6 +172,12 @@ export function AccountContent() {
       cancelled = true;
     };
   }, [accountToken]);
+
+  useEffect(() => {
+    if (!message) return;
+    const timer = window.setTimeout(() => setMessage(""), 3500);
+    return () => window.clearTimeout(timer);
+  }, [message]);
 
   const startNewAddress = () => {
     setEditingAddress(null);
@@ -434,7 +440,6 @@ export function AccountContent() {
             <p className="text-[11px] tracking-[0.1em] text-[#8C867C] uppercase mt-1">
               {orders.length} ORDER{orders.length === 1 ? "" : "S"} · {addresses.length} SAVED ADDRESS{addresses.length === 1 ? "" : "ES"}
             </p>
-            {message && <p className="mt-4 text-[13px] font-medium text-[#686B59]">{message}</p>}
           </div>
 
           <div className="w-full grid grid-cols-1 lg:grid-cols-[250px_minmax(0,850px)] gap-6 lg:gap-7">
@@ -504,6 +509,13 @@ export function AccountContent() {
               </button>
             </div>
           </div>
+        </div>
+      )}
+
+      {message && (
+        <div className="fixed left-1/2 top-24 z-[80] w-[calc(100%-32px)] max-w-sm -translate-x-1/2 rounded-[18px] border border-[#E8E5DC] bg-white px-5 py-4 text-center shadow-[0_18px_50px_rgba(37,42,26,0.12)]">
+          <p className="text-[12px] font-bold uppercase tracking-[0.16em] text-[#8E9476]">Totemood</p>
+          <p className="mt-1 text-[14px] font-medium text-[#252A1A]">{message}</p>
         </div>
       )}
 

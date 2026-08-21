@@ -35,6 +35,44 @@ interface AdminOrder {
   items: AdminOrderItem[];
 }
 
+const ORDER_STATUSES = [
+  "LIVE",
+  "MANIFESTED",
+  "SHIPPED",
+  "DD",
+  "DELIVER",
+  "RTO",
+  "CANCELLED",
+  "SHIP_LATER",
+] as const;
+
+function formatOrderStatus(status: string) {
+  return status.replace(/_/g, " ");
+}
+
+function statusClassName(status: string) {
+  switch (status) {
+    case "LIVE":
+      return "bg-yellow-100 text-yellow-800";
+    case "MANIFESTED":
+      return "bg-indigo-100 text-indigo-800";
+    case "SHIPPED":
+      return "bg-blue-100 text-blue-800";
+    case "DD":
+      return "bg-cyan-100 text-cyan-800";
+    case "DELIVER":
+      return "bg-green-100 text-green-800";
+    case "RTO":
+      return "bg-orange-100 text-orange-800";
+    case "CANCELLED":
+      return "bg-red-100 text-red-800";
+    case "SHIP_LATER":
+      return "bg-purple-100 text-purple-800";
+    default:
+      return "bg-gray-100 text-gray-800";
+  }
+}
+
 export default function AdminOrders() {
   const [orders, setOrders] = useState<AdminOrder[]>([]);
   const [loading, setLoading] = useState(true);
@@ -111,7 +149,7 @@ export default function AdminOrders() {
     const rows = orders.map(order => [
       order.id,
       new Date(order.createdAt).toISOString(),
-      order.status,
+      formatOrderStatus(order.status),
       order.customerFirstName,
       order.customerLastName,
       order.customerEmail,
@@ -183,14 +221,9 @@ export default function AdminOrders() {
                   <div className="text-xs text-[#5A5A55]">{order.customerEmail}</div>
                 </td>
                 <td className="p-4">
-                  <span className={`px-2 py-1 rounded text-xs font-bold inline-flex items-center gap-1 ${
-                    order.status === 'PENDING' ? 'bg-yellow-100 text-yellow-800' :
-                    order.status === 'PROCESSING' ? 'bg-blue-100 text-blue-800' :
-                    order.status === 'COMPLETED' ? 'bg-green-100 text-green-800' :
-                    'bg-gray-100 text-gray-800'
-                  }`}>
+                  <span className={`px-2 py-1 rounded text-xs font-bold inline-flex items-center gap-1 ${statusClassName(order.status)}`}>
                     {updatingId === order.id && <Loader2 className="w-3 h-3 animate-spin" />}
-                    {order.status}
+                    {formatOrderStatus(order.status)}
                   </span>
                 </td>
                 <td className="p-4 text-sm text-[#5A5A55]">
@@ -363,10 +396,9 @@ export default function AdminOrders() {
                   onChange={(e) => handleUpdateStatus(selectedOrder.id, e.target.value)}
                   disabled={updatingId === selectedOrder.id}
                 >
-                  <option value="PENDING">Pending</option>
-                  <option value="PROCESSING">Processing</option>
-                  <option value="COMPLETED">Completed</option>
-                  <option value="CANCELLED">Cancelled</option>
+                  {ORDER_STATUSES.map((status) => (
+                    <option key={status} value={status}>{formatOrderStatus(status)}</option>
+                  ))}
                 </select>
               </div>
             </div>

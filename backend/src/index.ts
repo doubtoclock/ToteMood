@@ -63,6 +63,13 @@ app.use((req: Request, _res: Response, next: NextFunction) => {
 
 // Initialize clients
 const prisma = new PrismaClient();
+const ORDER_STATUSES = ['LIVE', 'MANIFESTED', 'SHIPPED', 'DD', 'DELIVER', 'RTO', 'CANCELLED', 'SHIP_LATER'] as const;
+type OrderStatusValue = typeof ORDER_STATUSES[number];
+
+function normalizeOrderStatus(status: unknown): OrderStatusValue | null {
+  const normalized = String(status || '').trim().toUpperCase().replace(/[\s-]+/g, '_');
+  return (ORDER_STATUSES as readonly string[]).includes(normalized) ? normalized as OrderStatusValue : null;
+}
 
 // Setup Socket.IO
 const httpServer = createServer(app);
@@ -98,6 +105,7 @@ interface PendingCheckout {
   customerPhone: string;
   customerFirstName: string;
   customerLastName: string;
+  addressNickname: string;
   customerAddress: string;
   saveAddress: boolean;
   accountEmail: string | null;
@@ -253,6 +261,7 @@ function validateCustomer(data: any) {
     customerPhone: normalizePhone(data.customerPhone),
     customerFirstName: String(data.customerFirstName || '').trim(),
     customerLastName: String(data.customerLastName || '').trim(),
+    addressNickname: String(data.addressNickname || data.nickname || 'Other').trim() || 'Other',
     customerAddress: String(data.customerAddress || '').trim(),
     saveAddress: Boolean(data.saveAddress),
     customerCity: String(data.customerCity || '').trim(),
@@ -440,6 +449,7 @@ async function createOrderFromCheckout(checkout: PendingCheckout, razorpayPaymen
         customerPhone: checkout.customerPhone,
         customerFirstName: checkout.customerFirstName,
         customerLastName: checkout.customerLastName,
+        addressNickname: checkout.addressNickname,
         customerAddress: checkout.customerAddress,
         customerCity: checkout.customerCity,
         customerState: checkout.customerState,
@@ -447,7 +457,7 @@ async function createOrderFromCheckout(checkout: PendingCheckout, razorpayPaymen
         subtotal: checkout.subtotal,
         shipping: checkout.shipping,
         total: checkout.total,
-        status: 'PROCESSING',
+        status: 'LIVE',
         items: {
           create: checkout.items.map((item) => ({
             productId: item.productId,
@@ -756,7 +766,7 @@ app.post('/api/checkout/verify-razorpay', async (req, res) => {
       try {
         await saveAccountAddress({
           email: checkout.accountEmail || checkout.customerEmail,
-          nickname: 'Home',
+          nickname: checkout.addressNickname,
           firstName: checkout.customerFirstName,
           lastName: checkout.customerLastName,
           phone: checkout.customerPhone,
@@ -933,6 +943,7 @@ app.post('/gokwik/v1/cart/place-order', gokwikAuthMiddleware, async (req, res) =
         gokwikOrderId: req.body.gokwik_order_id || `gk_${Date.now()}`,
         customerFirstName: billing.first_name || session.customer.first_name || 'Customer',
         customerLastName: billing.last_name || session.customer.last_name || '',
+        addressNickname: billing.address_nickname || session.customer.address_nickname || 'Other',
         customerEmail: billing.email || session.customer.email || 'customer@example.com',
         customerPhone: billing.phone || session.customer.phone || '9999999999',
         customerAddress: billing.address_1 || session.customer.address_1 || '123 Main St',
@@ -942,7 +953,7 @@ app.post('/gokwik/v1/cart/place-order', gokwikAuthMiddleware, async (req, res) =
         subtotal: session.totals.subtotal,
         shipping: session.totals.shipping_total,
         total: orderTotal || session.totals.total,
-        status: paymentMethod === 'cod' ? 'PENDING' : 'PROCESSING',
+        status: 'LIVE',
         items: {
           create: orderItems,
         },
@@ -984,14 +995,26 @@ app.post('/gokwik/v1/cart/update-order-status', gokwikAuthMiddleware, async (req
 
     // Map GoKwik statuses to our OrderStatus enum
     const statusMap: Record<string, string> = {
-      'pending': 'PENDING',
-      'processing': 'PROCESSING',
-      'completed': 'COMPLETED',
+      'pending': 'LIVE',
+      'processing': 'LIVE',
+      'created': 'LIVE',
+      'confirmed': 'LIVE',
+      'manifested': 'MANIFESTED',
+      'shipped': 'SHIPPED',
+      'out_for_delivery': 'DD',
+      'ofd': 'DD',
+      'dd': 'DD',
+      'completed': 'DELIVER',
+      'delivered': 'DELIVER',
+      'deliver': 'DELIVER',
+      'rto': 'RTO',
       'cancelled': 'CANCELLED',
-      'delivered': 'COMPLETED',
+      'canceled': 'CANCELLED',
+      'ship_later': 'SHIP_LATER',
+      'ship later': 'SHIP_LATER',
     };
 
-    const mappedStatus = statusMap[orderStatus?.toLowerCase()] || 'PENDING';
+    const mappedStatus = statusMap[String(orderStatus || '').toLowerCase()] || 'LIVE';
 
     const order = await prisma.order.findFirst({
       where: {
@@ -1063,12 +1086,12 @@ app.post('/gokwik/v1/payment-notification', gokwikAuthMiddleware, async (req: Re
 
     // Map GoKwik payment statuses to our OrderStatus
     const statusMap: Record<string, string> = {
-      'success': 'PROCESSING',
-      'completed': 'PROCESSING',
-      'paid': 'PROCESSING',
-      'captured': 'PROCESSING',
-      'pending': 'PENDING',
-      'processing': 'PROCESSING',
+      'success': 'LIVE',
+      'completed': 'LIVE',
+      'paid': 'LIVE',
+      'captured': 'LIVE',
+      'pending': 'LIVE',
+      'processing': 'LIVE',
       'failed': 'CANCELLED',
       'cancelled': 'CANCELLED',
       'canceled': 'CANCELLED',
@@ -1244,7 +1267,13 @@ app.post('/api/orders', async (req, res) => {
 
 app.put('/api/orders/:id', async (req, res) => {
   try {
-    const { status } = req.body;
+    const status = normalizeOrderStatus(req.body.status);
+    if (!status) {
+      return res.status(400).json({
+        error: 'Invalid order status.',
+        allowedStatuses: ORDER_STATUSES,
+      });
+    }
     const order = await prisma.order.update({
       where: { id: req.params.id },
       data: { status },
@@ -1282,7 +1311,7 @@ app.get('/api/admin/stats', async (_req, res) => {
   try {
     const [totalOrders, revenueResult, activeProducts] = await Promise.all([
       prisma.order.count(),
-      prisma.order.aggregate({ _sum: { total: true }, where: { status: 'COMPLETED' } }),
+      prisma.order.aggregate({ _sum: { total: true }, where: { status: 'DELIVER' } }),
       prisma.product.count(),
     ]);
 
@@ -1300,7 +1329,7 @@ app.get('/api/admin/stats', async (_req, res) => {
 app.get('/api/admin/revenue-chart', async (_req, res) => {
   try {
     const orders = await prisma.order.findMany({
-      where: { status: 'COMPLETED' },
+      where: { status: 'DELIVER' },
       select: { total: true, createdAt: true },
       orderBy: { createdAt: 'asc' },
     });

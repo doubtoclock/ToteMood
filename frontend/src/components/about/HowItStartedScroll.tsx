@@ -25,7 +25,7 @@ export function HowItStartedScroll() {
             
             {/* Left Column: Image with Wipe Effect */}
             <div className="w-full lg:w-1/2 flex justify-center">
-              <div className="relative w-full max-w-[400px] aspect-[4/5] md:aspect-[3/4] rounded-[24px] overflow-hidden border border-[#E8E5DC] shadow-xl">
+              <div className="relative w-full max-w-[400px] aspect-[4/5] md:aspect-[3/4] rounded-[24px] overflow-hidden border border-[#E8E5DC] shadow-xl bg-[#F5F3EC]">
                 
                 {/* Base Image (Before) */}
                 <div className="absolute inset-0">
@@ -33,7 +33,7 @@ export function HowItStartedScroll() {
                     src="/siya2.png" 
                     alt="Original Photo" 
                     fill 
-                    className="object-cover"
+                    className="object-contain object-top"
                   />
                 </div>
 
@@ -46,7 +46,7 @@ export function HowItStartedScroll() {
                     src="/siya_ghibli.png" 
                     alt="Ghibli Version" 
                     fill 
-                    className="object-cover"
+                    className="object-contain object-top"
                   />
                 </motion.div>
 
@@ -78,7 +78,7 @@ export function HowItStartedScroll() {
                   What started as a personal creative outlet quickly resonated with people who were looking for ways to express love without relying on mass-produced goods. Slowly, carefully, Totemood grew into a dedicated studio.
                 </p>
                 <p>
-                  Today, every piece we craft still carries that original intention. We don't just process orders; we carefully assemble the fragments of your stories into art you can hold.
+                  Today, every piece we craft still carries that original intention. We don&apos;t just process orders; we carefully assemble the fragments of your stories into art you can hold.
                 </p>
               </div>
             </div>

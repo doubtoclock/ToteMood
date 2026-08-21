@@ -52,6 +52,7 @@ export default function CheckoutPage() {
   const [isSuccess, setIsSuccess] = useState(false);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [checkoutError, setCheckoutError] = useState("");
+  const [authMessage, setAuthMessage] = useState("");
   const [confirmedOrderId, setConfirmedOrderId] = useState("");
   const accountToken = useAuthStore((state) => state.token);
   const signIn = useAuthStore((state) => state.signIn);
@@ -87,10 +88,18 @@ export default function CheckoutPage() {
         body: JSON.stringify({ credential }),
       });
       signIn(session);
+      setAuthMessage("Successfully logged in.");
     } catch (error) {
       console.error("Google sign-in failed:", error);
+      setAuthMessage(error instanceof Error ? error.message : "Google sign-in failed.");
     }
   };
+
+  useEffect(() => {
+    if (!authMessage) return;
+    const timer = window.setTimeout(() => setAuthMessage(""), 3500);
+    return () => window.clearTimeout(timer);
+  }, [authMessage]);
 
   useEffect(() => {
     if (!GOOGLE_CLIENT_ID || accountToken || !googleButtonNode) return;
@@ -360,6 +369,12 @@ export default function CheckoutPage() {
     return (
       <main className="min-h-screen bg-[#FAF9F8] pt-32 pb-24 flex flex-col items-center justify-center text-center px-6">
         <AmbientGlow color="bg-[#C4C9B3]" opacity={0.15} position="top-[10%] left-[20%]" shape="organic1" />
+        {authMessage && (
+          <div className="fixed left-1/2 top-24 z-[80] w-[calc(100%-32px)] max-w-sm -translate-x-1/2 rounded-[18px] border border-[#E8E5DC] bg-white px-5 py-4 text-center shadow-[0_18px_50px_rgba(37,42,26,0.12)]">
+            <p className="text-[12px] font-bold uppercase tracking-[0.16em] text-[#8E9476]">Totemood</p>
+            <p className="mt-1 text-[14px] font-medium text-[#252A1A]">{authMessage}</p>
+          </div>
+        )}
         <div className="bg-white p-10 md:p-14 rounded-[24px] shadow-sm max-w-md w-full relative z-10 border border-[#E8E5DC]">
           <Lock className="w-12 h-12 text-[#8E9476] mx-auto mb-6" strokeWidth={1.5} />
           <h1 className="text-[28px] font-title text-[#252A1A] mb-3">Sign in to checkout</h1>
@@ -388,6 +403,12 @@ export default function CheckoutPage() {
 
   return (
     <main className="min-h-screen bg-[#FAF9F8] pt-24 md:pt-32 pb-24 relative">
+      {authMessage && (
+        <div className="fixed left-1/2 top-24 z-[80] w-[calc(100%-32px)] max-w-sm -translate-x-1/2 rounded-[18px] border border-[#E8E5DC] bg-white px-5 py-4 text-center shadow-[0_18px_50px_rgba(37,42,26,0.12)]">
+          <p className="text-[12px] font-bold uppercase tracking-[0.16em] text-[#8E9476]">Totemood</p>
+          <p className="mt-1 text-[14px] font-medium text-[#252A1A]">{authMessage}</p>
+        </div>
+      )}
       <div className="container mx-auto px-6 lg:px-12 max-w-[1100px] relative z-10">
         
         <Link href="/shop" className="inline-flex items-center text-[12px] font-bold uppercase tracking-widest text-[#8C867C] hover:text-[#252A1A] transition-colors mb-6 md:mb-8">

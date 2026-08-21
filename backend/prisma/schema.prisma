@@ -29,6 +29,7 @@ model Order {
   customerPhone     String
   customerFirstName String
   customerLastName  String
+  addressNickname   String      @default("Other")
   customerAddress   String
   customerCity      String
   customerState     String
@@ -36,7 +37,7 @@ model Order {
   subtotal          Float
   shipping          Float
   total             Float
-  status            OrderStatus @default(PENDING)
+  status            OrderStatus @default(LIVE)
   createdAt         DateTime    @default(now())
   updatedAt         DateTime    @updatedAt
   items             OrderItem[]
@@ -75,8 +76,12 @@ model SavedAddress {
 }
 
 enum OrderStatus {
-  PENDING
-  PROCESSING
-  COMPLETED
+  LIVE
+  MANIFESTED
+  SHIPPED
+  DD
+  DELIVER
+  RTO
   CANCELLED
+  SHIP_LATER
 }
