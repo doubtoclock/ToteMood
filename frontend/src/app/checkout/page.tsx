@@ -9,7 +9,8 @@ import { useEffect, useState, useRef } from "react";
 import { apiFetch } from "@/lib/api";
 import { loadGoogleIdentity, renderGoogleSignInButton } from "@/lib/googleSignIn";
 import { useProducts } from "@/lib/useProducts";
-import { SavedAddress, AccountSession, accountAuthHeaders, getStoredAccountProfile, getStoredAccountToken, saveStoredAccountSession } from "@/lib/account";
+import { SavedAddress, AccountSession, accountAuthHeaders, getStoredAccountProfile } from "@/lib/account";
+import { useAuthStore } from "@/lib/store/useAuthStore";
 
 declare global {
   interface Window {
@@ -52,7 +53,8 @@ export default function CheckoutPage() {
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [checkoutError, setCheckoutError] = useState("");
   const [confirmedOrderId, setConfirmedOrderId] = useState("");
-  const [accountToken, setAccountToken] = useState(() => getStoredAccountToken());
+  const accountToken = useAuthStore((state) => state.token);
+  const signIn = useAuthStore((state) => state.signIn);
   const [savedAddresses, setSavedAddresses] = useState<SavedAddress[]>([]);
   const [selectedAddressId, setSelectedAddressId] = useState("other");
   const [saveAddress, setSaveAddress] = useState(false);
@@ -84,8 +86,7 @@ export default function CheckoutPage() {
         method: "POST",
         body: JSON.stringify({ credential }),
       });
-      saveStoredAccountSession(session);
-      setAccountToken(session.token);
+      signIn(session);
     } catch (error) {
       console.error("Google sign-in failed:", error);
     }

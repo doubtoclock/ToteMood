@@ -253,7 +253,7 @@ export function AccountContent() {
       </div>
 
       {!accountToken ? (
-        <div className="max-w-[650px]">
+        <div key="account-signed-out" className="max-w-[650px]">
           <p className="text-[14px] text-[#686B59] mb-5">Sign in with Google to see your own orders and saved addresses.</p>
           {GOOGLE_CLIENT_ID ? (
             <div ref={setGoogleButtonNode} />
@@ -262,7 +262,7 @@ export function AccountContent() {
           )}
         </div>
       ) : (
-        <div className="flex flex-col sm:flex-row gap-5 sm:items-center max-w-[650px]">
+        <div key="account-signed-in" className="flex flex-col sm:flex-row gap-5 sm:items-center max-w-[650px]">
           {profile.picture && (
             <div className="relative h-16 w-16 overflow-hidden rounded-full bg-[#F5F3EC]">
               <Image src={profile.picture} alt={profile.name || profile.email} fill className="object-cover" />
