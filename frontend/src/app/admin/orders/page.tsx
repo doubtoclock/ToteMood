@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import { Eye, Download, User, Phone, MapPin, PackageOpen, Trash2, Loader2, FileSpreadsheet } from "lucide-react";
 import Image from "next/image";
 import { io } from "socket.io-client";
-import { apiFetch, SOCKET_URL } from "@/lib/api";
+import { apiFetch, ENABLE_REALTIME, SOCKET_URL } from "@/lib/api";
 
 interface AdminOrderItem {
   id: string;
@@ -92,6 +92,8 @@ export default function AdminOrders() {
         console.error(err);
         setLoading(false);
       });
+
+    if (!ENABLE_REALTIME) return;
 
     // Setup Socket.IO connection
     const socket = io(SOCKET_URL);

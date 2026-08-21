@@ -51,7 +51,16 @@ const corsOptions: cors.CorsOptions = {
 
 // Middleware
 app.use(cors(corsOptions));
-app.use(express.json({ limit: '50mb' }));
+app.use(express.json({ limit: '4mb' }));
+app.use((error: unknown, _req: Request, res: Response, next: NextFunction) => {
+  if (error && typeof error === 'object' && 'type' in error && error.type === 'entity.too.large') {
+    return res.status(413).json({
+      error: 'Uploaded image is too large. Please choose a smaller image and try again.',
+    });
+  }
+
+  next(error);
+});
 
 // Log GoKwik incoming requests for debugging
 app.use((req: Request, _res: Response, next: NextFunction) => {
@@ -151,6 +160,22 @@ const FALLBACK_PRODUCTS = [
     inventoryCount: 85,
   },
 ];
+const MAX_RESPONSE_DATA_IMAGE_LENGTH = 350_000;
+
+function sanitizeProductForResponse<T extends { image: string }>(product: T): T {
+  if (product.image.startsWith('data:image/') && product.image.length > MAX_RESPONSE_DATA_IMAGE_LENGTH) {
+    return {
+      ...product,
+      image: '/images/product_mockup.png',
+    };
+  }
+
+  return product;
+}
+
+function sanitizeProductsForResponse<T extends { image: string }>(products: T[]): T[] {
+  return products.map(sanitizeProductForResponse);
+}
 
 function normalizeOrderStatus(status: unknown): OrderStatusValue | null {
   const normalized = String(status || '').trim().toUpperCase().replace(/[\s-]+/g, '_');
@@ -1396,7 +1421,7 @@ app.get('/api/products', async (_req, res) => {
         orderBy: { createdAt: 'asc' }
       });
     }
-    res.json(products);
+    res.json(sanitizeProductsForResponse(products));
   } catch (error) {
     console.error("Failed to fetch products:", error);
     res.json(FALLBACK_PRODUCTS);
@@ -1408,7 +1433,7 @@ app.get('/api/products/:id', async (req, res) => {
     await ensureCatalogCustomizationColumns();
     const product = await prisma.product.findUnique({ where: { id: req.params.id } });
     if (!product) return res.status(404).json({ error: "Product not found" });
-    res.json(product);
+    res.json(sanitizeProductForResponse(product));
   } catch (error) {
     console.error("Failed to fetch product:", error);
     const product = FALLBACK_PRODUCTS.find((fallbackProduct) => fallbackProduct.id === req.params.id);

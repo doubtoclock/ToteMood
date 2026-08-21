@@ -19,12 +19,18 @@ export default function ProductPage() {
   const product = products.find((p) => p.id === id);
 
   if (loading && !product) {
-    return <ProductSkeleton />;
+    return (
+      <>
+        <ScrollToTop />
+        <ProductSkeleton />
+      </>
+    );
   }
 
   if (!product) {
     return (
       <main className="min-h-screen bg-[#F8F6EF] pt-32 px-6 text-center">
+        <ScrollToTop />
         <h1 className="text-[32px] font-title text-[#252A1A] mb-4">
           Product unavailable
         </h1>

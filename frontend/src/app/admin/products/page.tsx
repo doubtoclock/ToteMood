@@ -3,8 +3,9 @@
 import { useCallback, useState, useEffect, useRef } from "react";
 import Image from "next/image";
 import { Plus, Edit2, Trash2, X, Upload, ImageIcon } from "lucide-react";
-import { apiFetch, SOCKET_URL } from "@/lib/api";
+import { apiFetch, ENABLE_REALTIME, SOCKET_URL } from "@/lib/api";
 import { io } from "socket.io-client";
+import { compressImageForUpload } from "@/lib/imageCompression";
 
 interface AdminProduct {
   id: string;
@@ -67,6 +68,8 @@ export default function AdminProducts() {
 
   useEffect(() => {
     void Promise.resolve().then(fetchProducts);
+    if (!ENABLE_REALTIME) return;
+
     const socket = io(SOCKET_URL);
     socket.on("products_updated", fetchProducts);
     return () => {
@@ -74,22 +77,14 @@ export default function AdminProducts() {
     };
   }, [fetchProducts]);
 
-  const processFile = (file: File) => {
-    if (!file.type.startsWith('image/')) {
-      alert('Please upload an image file');
-      return;
-    }
-    if (file.size > 5 * 1024 * 1024) {
-      alert('Image must be under 5MB');
-      return;
-    }
-    const reader = new FileReader();
-    reader.onload = () => {
-      const result = reader.result as string;
+  const processFile = async (file: File) => {
+    try {
+      const result = await compressImageForUpload(file);
       setImage(result);
       setImagePreview(result);
-    };
-    reader.readAsDataURL(file);
+    } catch (error) {
+      alert(error instanceof Error ? error.message : "Could not upload this image.");
+    }
   };
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {

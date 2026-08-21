@@ -11,6 +11,7 @@ import { loadGoogleIdentity, renderGoogleSignInButton } from "@/lib/googleSignIn
 import { useProducts } from "@/lib/useProducts";
 import { SavedAddress, AccountSession, accountAuthHeaders, getStoredAccountProfile } from "@/lib/account";
 import { useAuthStore } from "@/lib/store/useAuthStore";
+import { compressImageForUpload } from "@/lib/imageCompression";
 
 declare global {
   interface Window {
@@ -34,6 +35,7 @@ interface RazorpayPaymentResponse {
 }
 
 const wait = (delayMs: number) => new Promise((resolve) => setTimeout(resolve, delayMs));
+
 
 const withTimeout = async <T,>(promise: Promise<T>, timeoutMs: number, message: string) => {
   let timeoutId: ReturnType<typeof setTimeout> | undefined;
@@ -237,15 +239,20 @@ export default function CheckoutPage() {
     throw lastError;
   };
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (file && activeUpload) {
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        setCustomImage(activeUpload.id, activeUpload.index, reader.result as string);
-        setActiveUpload(null);
-      };
-      reader.readAsDataURL(file);
+    e.target.value = "";
+    if (!file || !activeUpload) return;
+
+    try {
+      setCheckoutError("");
+      const compressedImage = await compressImageForUpload(file);
+      setCustomImage(activeUpload.id, activeUpload.index, compressedImage);
+      setActiveUpload(null);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Could not upload this image.";
+      setFieldErrors({ items: message });
+      setCheckoutError(message);
     }
   };
 
@@ -292,7 +299,7 @@ export default function CheckoutPage() {
         quantity: item.quantity,
         price: item.product.price,
         customImageUrl: item.customImages?.[0] || null,
-        customImageUrls: item.customImages?.slice(0, item.quantity) || [],
+        customImageUrls: item.customImages?.slice(0, item.quantity).filter(Boolean) || [],
         customTexts: item.customTexts?.slice(0, item.quantity) || []
       }))
     };

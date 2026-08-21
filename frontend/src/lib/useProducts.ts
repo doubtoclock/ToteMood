@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { io } from "socket.io-client";
 import { Product, products as staticProducts } from "@/lib/data/products";
-import { apiFetch, SOCKET_URL } from "@/lib/api";
+import { apiFetch, ENABLE_REALTIME, SOCKET_URL } from "@/lib/api";
 
 const CACHE_KEY = "totemood_products_cache_v6";
 const PRODUCT_LABELS = ["bestseller", "new", "premium"] as const;
@@ -124,6 +124,8 @@ export function useProducts() {
 
   useEffect(() => {
     void Promise.resolve().then(fetchProducts);
+    if (!ENABLE_REALTIME) return;
+
     const socket = io(SOCKET_URL);
     socket.on("products_updated", fetchProducts);
     return () => {
