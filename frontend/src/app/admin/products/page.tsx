@@ -137,9 +137,9 @@ export default function AdminProducts() {
   };
 
   const handleGalleryFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = e.target.files;
+    const files = e.target.files ? Array.from(e.target.files) : [];
     e.target.value = "";
-    if (files?.length) void processGalleryFiles(files);
+    if (files.length) void processGalleryFiles(files);
   };
 
   const handleDrop = (e: React.DragEvent) => {
