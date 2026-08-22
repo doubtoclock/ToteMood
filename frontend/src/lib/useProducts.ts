@@ -136,7 +136,13 @@ export function useProducts() {
     void Promise.resolve().then(fetchProducts);
     if (!ENABLE_REALTIME) return;
 
-    const socket = io(SOCKET_URL);
+    const socket = io(SOCKET_URL, {
+      reconnection: true,
+      reconnectionDelay: 1000,
+      reconnectionAttempts: 10,
+      transports: ["polling", "websocket"],
+    });
+    socket.on("connect_error", () => {});
     socket.on("products_updated", fetchProducts);
     return () => {
       socket.disconnect();

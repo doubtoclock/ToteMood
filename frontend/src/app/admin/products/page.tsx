@@ -21,6 +21,13 @@ interface AdminProduct {
   inventoryCount: number;
 }
 
+const MAX_GALLERY_IMAGES = 8;
+const PAYLOAD_WARNING_BYTES = 5 * 1024 * 1024;
+
+function estimateJsonBytes(value: unknown) {
+  return new Blob([JSON.stringify(value)]).size;
+}
+
 const normalizeAdminLabel = (product: AdminProduct): AdminProduct["label"] => {
   const value = String(product.label || product.category || "").trim().toLowerCase();
   return value === "bestseller" || value === "premium" || value === "new" ? value : "new";
@@ -74,7 +81,13 @@ export default function AdminProducts() {
     void Promise.resolve().then(fetchProducts);
     if (!ENABLE_REALTIME) return;
 
-    const socket = io(SOCKET_URL);
+    const socket = io(SOCKET_URL, {
+      reconnection: true,
+      reconnectionDelay: 1000,
+      reconnectionAttempts: 10,
+      transports: ["polling", "websocket"],
+    });
+    socket.on("connect_error", () => {});
     socket.on("products_updated", fetchProducts);
     return () => {
       socket.disconnect();
@@ -108,16 +121,21 @@ export default function AdminProducts() {
         throw firstError?.reason || new Error("Could not upload these images.");
       }
 
+      const availableSlots = Math.max(0, MAX_GALLERY_IMAGES - gallery.length);
+      const acceptedResults = results.slice(0, availableSlots);
       setGallery((current) => {
         const next = [...current];
-        for (const result of results) {
+        for (const result of acceptedResults) {
           if (!next.includes(result)) next.push(result);
         }
         return next;
       });
-      if (!image && results[0]) {
-        setImage(results[0]);
-        setImagePreview(results[0]);
+      if (results.length > acceptedResults.length) {
+        alert(`Only ${MAX_GALLERY_IMAGES} gallery images are allowed. Extra images were skipped.`);
+      }
+      if (!image && acceptedResults[0]) {
+        setImage(acceptedResults[0]);
+        setImagePreview(acceptedResults[0]);
       }
       const failedCount = settled.length - results.length;
       if (failedCount > 0) {
@@ -225,6 +243,20 @@ export default function AdminProducts() {
       gallery: [coverImage, ...gallery.filter((item) => item !== coverImage)]
     };
 
+    if (payload.gallery.length > MAX_GALLERY_IMAGES) {
+      alert(`Please keep the gallery to ${MAX_GALLERY_IMAGES} images or fewer.`);
+      setIsSubmitting(false);
+      return;
+    }
+
+    if (estimateJsonBytes(payload) > PAYLOAD_WARNING_BYTES) {
+      const shouldContinue = confirm("This product has a large image gallery and may take longer to save. Continue?");
+      if (!shouldContinue) {
+        setIsSubmitting(false);
+        return;
+      }
+    }
+
     try {
       const url = editingProduct 
         ? `/api/products/${editingProduct.id}`
@@ -237,7 +269,7 @@ export default function AdminProducts() {
       setIsModalOpen(false);
       fetchProducts();
     } catch (error) {
-      console.error(error);
+      alert(error instanceof Error ? error.message : "Failed to save product. Please try again.");
     } finally {
       setIsSubmitting(false);
     }

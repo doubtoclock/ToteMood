@@ -96,7 +96,13 @@ export default function AdminOrders() {
     if (!ENABLE_REALTIME) return;
 
     // Setup Socket.IO connection
-    const socket = io(SOCKET_URL);
+    const socket = io(SOCKET_URL, {
+      reconnection: true,
+      reconnectionDelay: 1000,
+      reconnectionAttempts: 10,
+      transports: ["polling", "websocket"],
+    });
+    socket.on("connect_error", () => {});
 
     socket.on("new_order", (order: AdminOrder) => {
       setOrders(prev => [order, ...prev]);
