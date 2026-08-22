@@ -1454,6 +1454,7 @@ app.post('/gokwik/v1/cart/remove-out-of-stock-items', gokwikAuthMiddleware, (_re
 
 app.get('/api/products', async (_req, res) => {
   try {
+    await ensureCatalogCustomizationColumns();
     let products;
     try {
       products = await prisma.product.findMany({
