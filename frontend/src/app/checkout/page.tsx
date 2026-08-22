@@ -5,11 +5,10 @@ import { AmbientGlow } from "@/components/ui/AmbientGlow";
 import Image from "next/image";
 import Link from "next/link";
 import { Upload, CheckCircle2, ArrowLeft, Loader2, Lock, Check } from "lucide-react";
-import { useCallback, useEffect, useState, useRef } from "react";
+import { useEffect, useState, useRef } from "react";
 import { apiFetch } from "@/lib/api";
-import { loadGoogleIdentity, renderGoogleSignInButton } from "@/lib/googleSignIn";
 import { useProducts } from "@/lib/useProducts";
-import { SavedAddress, AccountSession, accountAuthHeaders, getStoredAccountProfile } from "@/lib/account";
+import { SavedAddress, accountAuthHeaders, getStoredAccountProfile } from "@/lib/account";
 import { useAuthStore } from "@/lib/store/useAuthStore";
 import { compressImageForUpload } from "@/lib/imageCompression";
 
@@ -18,8 +17,6 @@ declare global {
     Razorpay?: new (options: Record<string, unknown>) => { open: () => void };
   }
 }
-
-const GOOGLE_CLIENT_ID = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID || "";
 
 const DEPOSIT_AMOUNT = 49;
 const VERIFY_RETRY_DELAYS_MS = [1000, 2000];
@@ -79,7 +76,7 @@ const emptyCheckoutForm = {
   city: "",
   state: "",
   zip: "",
-  addressNickname: "Other",
+  addressNickname: "Custom Address",
 };
 
 export default function CheckoutPage() {
@@ -93,16 +90,13 @@ export default function CheckoutPage() {
   const [isSuccess, setIsSuccess] = useState(false);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [checkoutError, setCheckoutError] = useState("");
-  const [authMessage, setAuthMessage] = useState("");
   const [confirmedOrderId, setConfirmedOrderId] = useState("");
   const accountToken = useAuthStore((state) => state.token);
-  const signIn = useAuthStore((state) => state.signIn);
   const accountEmail = useAuthStore((state) => state.profile.email);
   const [savedAddresses, setSavedAddresses] = useState<SavedAddress[]>([]);
   const [selectedAddressId, setSelectedAddressId] = useState("other");
   const [saveAddress, setSaveAddress] = useState(false);
   const [paymentMethod, setPaymentMethod] = useState<"cod" | "prepaid">("cod");
-  const [googleButtonNode, setGoogleButtonNode] = useState<HTMLDivElement | null>(null);
   const [formValues, setFormValues] = useState(() => {
     const profile = getStoredAccountProfile();
     return {
@@ -121,41 +115,6 @@ export default function CheckoutPage() {
   useEffect(() => {
     syncProducts(liveProducts);
   }, [liveProducts, syncProducts]);
-
-  // Google sign-in for checkout
-  const handleGoogleCredential = useCallback(async (credential: string) => {
-    try {
-      const session = await apiFetch<AccountSession>("/api/auth/google", {
-        method: "POST",
-        body: JSON.stringify({ credential }),
-      });
-      signIn(session);
-      setAuthMessage("Successfully logged in.");
-    } catch (error) {
-      console.error("Google sign-in failed:", error);
-      setAuthMessage(error instanceof Error ? error.message : "Google sign-in failed.");
-    }
-  }, [signIn]);
-
-  useEffect(() => {
-    if (!authMessage) return;
-    const timer = window.setTimeout(() => setAuthMessage(""), 3500);
-    return () => window.clearTimeout(timer);
-  }, [authMessage]);
-
-  useEffect(() => {
-    if (!GOOGLE_CLIENT_ID || accountToken || !googleButtonNode) return;
-
-    let cancelled = false;
-    loadGoogleIdentity().then((googleId) => {
-      if (cancelled || !googleId || !googleButtonNode.isConnected) return;
-      renderGoogleSignInButton(googleButtonNode, GOOGLE_CLIENT_ID, handleGoogleCredential);
-    });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [googleButtonNode, accountToken, handleGoogleCredential]);
 
   const setFormValue = (key: keyof typeof emptyCheckoutForm, value: string) => {
     setSelectedAddressId("other");
@@ -180,6 +139,21 @@ export default function CheckoutPage() {
       zip: address.zip,
       addressNickname: address.nickname,
     });
+  };
+
+  const applyCustomAddress = () => {
+    setSelectedAddressId("other");
+    setSaveAddress(false);
+    setFormValues((current) => ({
+      ...current,
+      firstName: "",
+      lastName: "",
+      address: "",
+      city: "",
+      state: "",
+      zip: "",
+      addressNickname: "Custom Address",
+    }));
   };
 
   useEffect(() => {
@@ -314,7 +288,7 @@ export default function CheckoutPage() {
       customerFirstName: formValues.firstName,
       customerLastName: formValues.lastName,
       customerAddress: formValues.address,
-      addressNickname: selectedAddressId === "other" ? (formValues.addressNickname || "Other") : formValues.addressNickname,
+      addressNickname: selectedAddressId === "other" ? (formValues.addressNickname || "Custom Address") : formValues.addressNickname,
       saveAddress,
       accountToken,
       customerCity: formValues.city,
@@ -497,50 +471,12 @@ export default function CheckoutPage() {
     );
   }
 
-  if (!accountToken) {
-    return (
-      <main className="min-h-screen bg-[#FAF9F8] pt-32 pb-24 flex flex-col items-center justify-center text-center px-6">
-        <AmbientGlow color="bg-[#C4C9B3]" opacity={0.15} position="top-[10%] left-[20%]" shape="organic1" />
-        {authMessage && (
-          <div className="fixed left-1/2 top-24 z-[80] w-[calc(100%-32px)] max-w-sm -translate-x-1/2 rounded-[18px] border border-[#E8E5DC] bg-white px-5 py-4 text-center shadow-[0_18px_50px_rgba(37,42,26,0.12)]">
-            <p className="text-[12px] font-bold uppercase tracking-[0.16em] text-[#8E9476]">Totemood</p>
-            <p className="mt-1 text-[14px] font-medium text-[#252A1A]">{authMessage}</p>
-          </div>
-        )}
-        <div className="bg-white p-10 md:p-14 rounded-[24px] shadow-sm max-w-md w-full relative z-10 border border-[#E8E5DC]">
-          <Lock className="w-12 h-12 text-[#8E9476] mx-auto mb-6" strokeWidth={1.5} />
-          <h1 className="text-[28px] font-title text-[#252A1A] mb-3">Sign in to checkout</h1>
-          <p className="text-[15px] text-[#686B59] mb-8 leading-relaxed">
-            Please sign in with your Google account to complete your order.
-          </p>
-          <div className="flex justify-center">
-            {GOOGLE_CLIENT_ID ? (
-              <div ref={setGoogleButtonNode} />
-            ) : (
-              <p className="text-[13px] font-medium text-[#B5483B]">Google login is not configured.</p>
-            )}
-          </div>
-          <Link href="/shop" className="inline-flex items-center mt-8 text-[12px] font-bold uppercase tracking-widest text-[#8C867C] hover:text-[#252A1A] transition-colors">
-            <ArrowLeft className="w-3 h-3 mr-1.5" />
-            Back to Shop
-          </Link>
-        </div>
-      </main>
-    );
-  }
-
   const inputClass = "w-full bg-[#F5F3EC] border border-[#E8E5DC] rounded-[14px] px-5 h-[54px] text-[15px] text-[#252A1A] placeholder:text-[#8C867C] focus:outline-none focus:border-[#8E9476] focus:bg-white transition-colors shadow-sm";
   const errorClass = "mt-1.5 text-[12px] font-medium text-[#B5483B]";
   const inputWithError = (name: string) => `${inputClass} ${fieldErrors[name] ? "border-[#B5483B] bg-[#FFF8F6]" : ""}`;
 
   return (
     <main className="min-h-screen bg-[#FAF9F8] pt-24 md:pt-32 pb-24 relative">
-      {authMessage && (
-        <div className="fixed left-1/2 top-24 z-[80] w-[calc(100%-32px)] max-w-sm -translate-x-1/2 rounded-[18px] border border-[#E8E5DC] bg-white px-5 py-4 text-center shadow-[0_18px_50px_rgba(37,42,26,0.12)]">
-          <p className="text-[12px] font-bold uppercase tracking-[0.16em] text-[#8E9476]">Totemood</p>
-          <p className="mt-1 text-[14px] font-medium text-[#252A1A]">{authMessage}</p>
-        </div>
-      )}
       <div className="container mx-auto px-6 lg:px-12 max-w-[1100px] relative z-10">
         
         <Link href="/shop" className="inline-flex items-center text-[12px] font-bold uppercase tracking-widest text-[#8C867C] hover:text-[#252A1A] transition-colors mb-6 md:mb-8">
@@ -598,8 +534,7 @@ export default function CheckoutPage() {
                     onChange={(event) => {
                       const nextId = event.target.value;
                       if (nextId === "other") {
-                        setSelectedAddressId("other");
-                        setFormValues((current) => ({ ...current, addressNickname: "Other" }));
+                        applyCustomAddress();
                         return;
                       }
                       const selected = savedAddresses.find((address) => address.id === nextId);
@@ -607,7 +542,7 @@ export default function CheckoutPage() {
                     }}
                     className={inputClass}
                   >
-                    <option value="other">Other address</option>
+                    <option value="other">Custom Address</option>
                     {savedAddresses.map((address) => (
                       <option key={address.id} value={address.id}>
                         {address.nickname} - {address.address}, {address.city}
@@ -618,7 +553,7 @@ export default function CheckoutPage() {
               )}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="sm:col-span-2">
-                  <input name="addressNickname" type="text" placeholder="Address nickname, e.g. Home, Work, Other" required value={formValues.addressNickname} onChange={(event) => setFormValue("addressNickname", event.target.value)} className={inputWithError("addressNickname")} />
+                  <input name="addressNickname" type="text" placeholder="Address label, e.g. Home, Work, Custom Address" required value={formValues.addressNickname} onChange={(event) => setFormValue("addressNickname", event.target.value)} className={inputWithError("addressNickname")} />
                   {fieldErrors.addressNickname && <p className={errorClass}>{fieldErrors.addressNickname}</p>}
                 </div>
                 <div>

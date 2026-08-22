@@ -14,6 +14,7 @@ interface AdminProduct {
   price: number;
   oldPrice?: number | null;
   image: string;
+  gallery?: string[];
   isCustomizable: boolean;
   label: "bestseller" | "new" | "premium";
   category: string;
@@ -50,9 +51,11 @@ export default function AdminProducts() {
   const [inventoryCount, setInventoryCount] = useState("0");
   const [image, setImage] = useState("");
   const [imagePreview, setImagePreview] = useState("");
+  const [gallery, setGallery] = useState<string[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isDragOver, setIsDragOver] = useState(false);
-  const fileInputRef = useRef<HTMLInputElement>(null);
+  const coverFileInputRef = useRef<HTMLInputElement>(null);
+  const galleryFileInputRef = useRef<HTMLInputElement>(null);
 
   const fetchProducts = useCallback(() => {
     apiFetch<AdminProduct[]>('/api/products')
@@ -77,26 +80,64 @@ export default function AdminProducts() {
     };
   }, [fetchProducts]);
 
-  const processFile = async (file: File) => {
+  const processCoverFile = async (file: File) => {
     try {
       const result = await compressImageForUpload(file);
       setImage(result);
       setImagePreview(result);
+      setGallery((current) => current.length > 0 ? [result, ...current.filter((item) => item !== result)] : [result]);
     } catch (error) {
       alert(error instanceof Error ? error.message : "Could not upload this image.");
     }
   };
 
+  const processGalleryFiles = async (files: FileList | File[]) => {
+    try {
+      const results = await Promise.all(Array.from(files).map((file) => compressImageForUpload(file)));
+      setGallery((current) => {
+        const next = [...current];
+        for (const result of results) {
+          if (!next.includes(result)) next.push(result);
+        }
+        return next;
+      });
+    } catch (error) {
+      alert(error instanceof Error ? error.message : "Could not upload one of these images.");
+    }
+  };
+
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (file) processFile(file);
+    e.target.value = "";
+    if (file) processCoverFile(file);
+  };
+
+  const handleGalleryFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    e.target.value = "";
+    if (files?.length) void processGalleryFiles(files);
   };
 
   const handleDrop = (e: React.DragEvent) => {
     e.preventDefault();
     setIsDragOver(false);
     const file = e.dataTransfer.files?.[0];
-    if (file) processFile(file);
+    if (file) processCoverFile(file);
+  };
+
+  const setCoverFromGallery = (nextImage: string) => {
+    setImage(nextImage);
+    setImagePreview(nextImage);
+    setGallery((current) => [nextImage, ...current.filter((item) => item !== nextImage)]);
+  };
+
+  const removeGalleryImage = (nextImage: string) => {
+    setGallery((current) => current.filter((item) => item !== nextImage));
+    if (image === nextImage) {
+      const replacement = gallery.find((item) => item !== nextImage) || "";
+      setImage(replacement);
+      setImagePreview(replacement);
+    }
   };
 
   const openAddModal = () => {
@@ -110,6 +151,7 @@ export default function AdminProducts() {
     setInventoryCount("0");
     setImage("");
     setImagePreview("");
+    setGallery([]);
     setIsModalOpen(true);
   };
 
@@ -124,6 +166,7 @@ export default function AdminProducts() {
     setInventoryCount(product.inventoryCount.toString());
     setImage(product.image);
     setImagePreview(product.image);
+    setGallery(product.gallery && product.gallery.length > 0 ? product.gallery : [product.image].filter(Boolean));
     setIsModalOpen(true);
   };
 
@@ -144,6 +187,7 @@ export default function AdminProducts() {
     e.preventDefault();
     setIsSubmitting(true);
 
+    const coverImage = image || gallery[0] || "/images/product_mockup.png";
     const payload = {
       name,
       description,
@@ -153,7 +197,8 @@ export default function AdminProducts() {
       category,
       inventoryCount: parseInt(inventoryCount, 10),
       isCustomizable: category !== "no customization",
-      image: image || "/images/product_mockup.png"
+      image: coverImage,
+      gallery: [coverImage, ...gallery.filter((item) => item !== coverImage)]
     };
 
     try {
@@ -215,7 +260,7 @@ export default function AdminProducts() {
                     <div>
                       <div className="font-bold text-[#1C1C1A]">{product.name}</div>
                       <div className="text-xs text-[#5A5A55]">
-                        {(product.label || "new").charAt(0).toUpperCase() + (product.label || "new").slice(1)} · {product.category}
+                        {(product.label || "new").charAt(0).toUpperCase() + (product.label || "new").slice(1)} · {product.category} · {(product.gallery?.length || 1)} image{(product.gallery?.length || 1) === 1 ? "" : "s"}
                       </div>
                     </div>
                   </div>
@@ -336,16 +381,16 @@ export default function AdminProducts() {
 
                 <div className="space-y-4">
                   <div>
-                    <label className="text-xs font-bold uppercase tracking-widest text-[#5A5A55] block mb-2">Product Image</label>
+                    <label className="text-xs font-bold uppercase tracking-widest text-[#5A5A55] block mb-2">Cover Image</label>
                     <input
-                      ref={fileInputRef}
+                      ref={coverFileInputRef}
                       type="file"
                       accept="image/*"
                       onChange={handleFileChange}
                       className="hidden"
                     />
                     <div
-                      onClick={() => fileInputRef.current?.click()}
+                      onClick={() => coverFileInputRef.current?.click()}
                       onDragOver={(e) => { e.preventDefault(); setIsDragOver(true); }}
                       onDragLeave={() => setIsDragOver(false)}
                       onDrop={handleDrop}
@@ -369,9 +414,62 @@ export default function AdminProducts() {
                           </div>
                           <div className="text-center">
                             <p className="text-sm font-bold text-[#1C1C1A]">Click to upload</p>
-                            <p className="text-xs text-[#5A5A55] mt-1">PNG, JPG up to 5MB</p>
+                            <p className="text-xs text-[#5A5A55] mt-1">This appears first on shop cards</p>
                           </div>
                         </>
+                      )}
+                    </div>
+                  </div>
+                  <div>
+                    <div className="flex items-center justify-between gap-3 mb-2">
+                      <label className="text-xs font-bold uppercase tracking-widest text-[#5A5A55] block">Product Gallery</label>
+                      <button
+                        type="button"
+                        onClick={() => galleryFileInputRef.current?.click()}
+                        className="inline-flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-widest text-[#757D5C] hover:text-[#1C1C1A]"
+                      >
+                        <Plus className="w-3 h-3" /> Add images
+                      </button>
+                    </div>
+                    <input
+                      ref={galleryFileInputRef}
+                      type="file"
+                      accept="image/*"
+                      multiple
+                      onChange={handleGalleryFileChange}
+                      className="hidden"
+                    />
+                    <div className="grid grid-cols-4 gap-2">
+                      {gallery.map((galleryImage, index) => (
+                        <div key={`${galleryImage}-${index}`} className="relative aspect-square overflow-hidden rounded-lg border border-[#1C1C1A]/10 bg-[#F8F6EF]">
+                          <Image src={galleryImage} alt={`Gallery image ${index + 1}`} fill className="object-cover" />
+                          <div className="absolute inset-x-1 bottom-1 flex justify-between gap-1">
+                            <button
+                              type="button"
+                              onClick={() => setCoverFromGallery(galleryImage)}
+                              className="rounded bg-white/90 px-1.5 py-1 text-[9px] font-bold uppercase tracking-wide text-[#1C1C1A] shadow-sm"
+                            >
+                              {image === galleryImage ? "Cover" : "Set"}
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => removeGalleryImage(galleryImage)}
+                              className="rounded bg-white/90 p-1 text-red-500 shadow-sm"
+                              aria-label="Remove gallery image"
+                            >
+                              <Trash2 className="h-3 w-3" />
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                      {gallery.length === 0 && (
+                        <button
+                          type="button"
+                          onClick={() => galleryFileInputRef.current?.click()}
+                          className="col-span-4 h-20 rounded-xl border border-dashed border-[#1C1C1A]/20 text-sm font-bold text-[#5A5A55] hover:border-[#757D5C]/50"
+                        >
+                          Upload gallery images
+                        </button>
                       )}
                     </div>
                   </div>

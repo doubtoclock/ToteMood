@@ -5,7 +5,7 @@ import { io } from "socket.io-client";
 import { Product, products as staticProducts } from "@/lib/data/products";
 import { apiFetch, ENABLE_REALTIME, SOCKET_URL } from "@/lib/api";
 
-const CACHE_KEY = "totemood_products_cache_v6";
+const CACHE_KEY = "totemood_products_cache_v7";
 const PRODUCT_LABELS = ["bestseller", "new", "premium"] as const;
 const CUSTOMIZATION_CATEGORIES = ["image", "image+text", "no customization"] as const;
 
@@ -26,7 +26,7 @@ function normalizeLabel(product: Product, match?: Product): Product["label"] {
 
 function getProductGallery(product: Product): string[] {
   let gallery: string[] = [];
-  if (product.gallery && product.gallery.length > 1) {
+  if (product.gallery && product.gallery.length > 0) {
     gallery = [...product.gallery];
   } else {
     const match = staticProducts.find(
@@ -50,6 +50,10 @@ function getProductGallery(product: Product): string[] {
         gallery = [image];
       }
     }
+  }
+
+  if (product.image && !gallery.includes(product.image)) {
+    gallery.unshift(product.image);
   }
   
   if (!gallery.includes("/images/size.jpeg")) {
@@ -124,8 +128,10 @@ export function useProducts() {
   useEffect(() => {
     const cached = readCache();
     if (cached) {
-      setProducts(cached);
-      setLoading(false);
+      queueMicrotask(() => {
+        setProducts(cached);
+        setLoading(false);
+      });
     }
     void Promise.resolve().then(fetchProducts);
     if (!ENABLE_REALTIME) return;

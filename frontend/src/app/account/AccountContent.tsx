@@ -57,7 +57,7 @@ type AddressForm = Omit<SavedAddress, "id" | "createdAt" | "updatedAt">;
 
 const emptyAddress = (profile: AccountProfile): AddressForm => ({
   email: profile.email,
-  nickname: "Other",
+  nickname: "Custom Address",
   firstName: profile.firstName,
   lastName: profile.lastName,
   phone: profile.phone,
@@ -618,8 +618,11 @@ function AddressForm({
       </div>
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <div className="sm:col-span-2">
-          <label className={labelClass}>Nickname</label>
-          <input value={draft.nickname} onChange={(event) => setValue("nickname", event.target.value)} placeholder="Home, Work, Other" className={inputClass} />
+          <label className={labelClass}>Label</label>
+          <input value={draft.nickname} onChange={(event) => setValue("nickname", event.target.value)} placeholder="Home, Work, Custom Address" className={inputClass} />
+          <p className="mt-1.5 text-[12px] leading-relaxed text-[#9A968D]">
+            This label will be visible at checkout when you choose from saved addresses in your profile.
+          </p>
           {errors.nickname && <p className={errorClass}>{errors.nickname}</p>}
         </div>
         <div>

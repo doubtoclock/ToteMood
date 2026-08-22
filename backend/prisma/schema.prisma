@@ -14,6 +14,7 @@ model Product {
   price          Float
   oldPrice       Float?
   image          String
+  gallery        String[]    @default([])
   isCustomizable Boolean     @default(false)
   label          String      @default("new")
   category       String

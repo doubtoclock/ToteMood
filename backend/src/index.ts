@@ -106,6 +106,7 @@ const FALLBACK_PRODUCTS = [
     price: 499,
     oldPrice: 599,
     image: '/images/product/W1.png',
+    gallery: ['/images/product/W1.png', '/images/product/W2.png', '/images/product/W3.png', '/images/product/W4.png', '/images/size.jpeg'],
     isCustomizable: true,
     label: 'bestseller',
     category: 'image',
@@ -118,6 +119,7 @@ const FALLBACK_PRODUCTS = [
     price: 599,
     oldPrice: 749,
     image: '/images/product/W5.png',
+    gallery: ['/images/product/W5.png', '/images/product/W6.png', '/images/product/W7.png', '/images/product/W8.png', '/images/size.jpeg'],
     isCustomizable: true,
     label: 'bestseller',
     category: 'image+text',
@@ -130,6 +132,7 @@ const FALLBACK_PRODUCTS = [
     price: 599,
     oldPrice: 719,
     image: '/images/product/W9.png',
+    gallery: ['/images/product/W9.png', '/images/product/W10.png', '/images/product/W11.png', '/images/product/W12.png', '/images/size.jpeg'],
     isCustomizable: true,
     label: 'bestseller',
     category: 'image+text',
@@ -142,6 +145,7 @@ const FALLBACK_PRODUCTS = [
     price: 499,
     oldPrice: 599,
     image: '/images/product/W13.png',
+    gallery: ['/images/product/W13.png', '/images/product/W14.png', '/images/product/W15.png', '/images/product/W16.png', '/images/size.jpeg'],
     isCustomizable: true,
     label: 'new',
     category: 'image',
@@ -154,6 +158,7 @@ const FALLBACK_PRODUCTS = [
     price: 499,
     oldPrice: 599,
     image: '/images/product/W17.png',
+    gallery: ['/images/product/W17.png', '/images/product/W18.png', '/images/product/W19.png', '/images/product/W20.png', '/images/size.jpeg'],
     isCustomizable: true,
     label: 'new',
     category: 'image',
@@ -162,18 +167,31 @@ const FALLBACK_PRODUCTS = [
 ];
 const MAX_RESPONSE_DATA_IMAGE_LENGTH = 350_000;
 
-function sanitizeProductForResponse<T extends { image: string }>(product: T): T {
-  if (product.image.startsWith('data:image/') && product.image.length > MAX_RESPONSE_DATA_IMAGE_LENGTH) {
+function sanitizeImageForResponse(image: string) {
+  if (image.startsWith('data:image/') && image.length > MAX_RESPONSE_DATA_IMAGE_LENGTH) {
+    return '/images/product_mockup.png';
+  }
+  return image;
+}
+
+function sanitizeProductForResponse<T extends { image: string; gallery?: string[] }>(product: T): T {
+  const image = sanitizeImageForResponse(product.image);
+  const gallery = Array.isArray(product.gallery)
+    ? product.gallery.map(sanitizeImageForResponse)
+    : product.gallery;
+
+  if (image !== product.image || gallery !== product.gallery) {
     return {
       ...product,
-      image: '/images/product_mockup.png',
+      image,
+      gallery,
     };
   }
 
   return product;
 }
 
-function sanitizeProductsForResponse<T extends { image: string }>(products: T[]): T[] {
+function sanitizeProductsForResponse<T extends { image: string; gallery?: string[] }>(products: T[]): T[] {
   return products.map(sanitizeProductForResponse);
 }
 
@@ -394,7 +412,7 @@ function validateCustomer(data: any) {
     customerPhone: normalizePhone(data.customerPhone),
     customerFirstName: String(data.customerFirstName || '').trim(),
     customerLastName: String(data.customerLastName || '').trim(),
-    addressNickname: String(data.addressNickname || data.nickname || 'Other').trim() || 'Other',
+    addressNickname: String(data.addressNickname || data.nickname || 'Custom Address').trim() || 'Custom Address',
     customerAddress: String(data.customerAddress || '').trim(),
     saveAddress: Boolean(data.saveAddress),
     customerCity: String(data.customerCity || '').trim(),
@@ -422,7 +440,7 @@ function validateAccountAddress(data: any): { address: AccountAddressInput; erro
   const errors: Record<string, string> = {};
   const address = {
     email: normalizeEmail(data.email || data.customerEmail),
-    nickname: String(data.nickname || 'Other').trim() || 'Other',
+    nickname: String(data.nickname || 'Custom Address').trim() || 'Custom Address',
     firstName: String(data.firstName || data.customerFirstName || '').trim(),
     lastName: String(data.lastName || data.customerLastName || '').trim(),
     phone: normalizePhone(data.phone || data.customerPhone),
@@ -434,7 +452,7 @@ function validateAccountAddress(data: any): { address: AccountAddressInput; erro
   };
 
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(address.email)) errors.email = 'Enter a valid email address.';
-  if (address.nickname.length < 1) errors.nickname = 'Nickname is required.';
+  if (address.nickname.length < 1) errors.nickname = 'Label is required.';
   if (address.firstName.length < 2) errors.firstName = 'First name is required.';
   if (address.lastName.length < 1) errors.lastName = 'Last name is required.';
   if (!/^[6-9]\d{9}$/.test(address.phone)) errors.phone = 'Enter a valid 10 digit WhatsApp number.';
@@ -462,6 +480,23 @@ function normalizeProductCategory(value: unknown) {
   return ['image', 'image+text', 'no customization'].includes(category) ? category : 'image';
 }
 
+function normalizeProductGallery(value: unknown, coverImage: string) {
+  const seen = new Set<string>();
+  const addImage = (next: unknown, gallery: string[]) => {
+    const image = String(next || '').trim();
+    if (!image || seen.has(image)) return;
+    seen.add(image);
+    gallery.push(image);
+  };
+
+  const gallery: string[] = [];
+  addImage(coverImage, gallery);
+  if (Array.isArray(value)) {
+    value.forEach((item) => addImage(item, gallery));
+  }
+  return gallery;
+}
+
 let catalogCustomizationColumnsReady = false;
 
 function isMissingCatalogCustomizationColumnError(error: unknown) {
@@ -472,10 +507,13 @@ function isMissingCatalogCustomizationColumnError(error: unknown) {
 
   return prismaError.code === 'P2022'
     || column === 'label'
+    || column === 'gallery'
     || column === 'customtext'
     || message.includes('product.label')
+    || message.includes('product.gallery')
     || message.includes('orderitem.customtext')
     || message.includes('column "label" does not exist')
+    || message.includes('column "gallery" does not exist')
     || message.includes('column "customtext" does not exist');
 }
 
@@ -483,6 +521,13 @@ async function ensureCatalogCustomizationColumns() {
   if (catalogCustomizationColumnsReady) return;
 
   await prisma.$executeRawUnsafe(`ALTER TABLE "Product" ADD COLUMN IF NOT EXISTS "label" TEXT NOT NULL DEFAULT 'new';`);
+  await prisma.$executeRawUnsafe(`ALTER TABLE "Product" ADD COLUMN IF NOT EXISTS "gallery" TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[];`);
+  await prisma.$executeRawUnsafe(`UPDATE "Product" SET "gallery" = ARRAY["image"] WHERE cardinality("gallery") = 0 AND COALESCE("image", '') <> '';`);
+  await prisma.$executeRawUnsafe(`UPDATE "Product" SET "gallery" = ARRAY['/images/product/W1.png', '/images/product/W2.png', '/images/product/W3.png', '/images/product/W4.png', '/images/size.jpeg'] WHERE "id" = 'ghibli-art-tote' AND cardinality("gallery") <= 1;`);
+  await prisma.$executeRawUnsafe(`UPDATE "Product" SET "gallery" = ARRAY['/images/product/W5.png', '/images/product/W6.png', '/images/product/W7.png', '/images/product/W8.png', '/images/size.jpeg'] WHERE "id" = 'ghibli-text-tote' AND cardinality("gallery") <= 1;`);
+  await prisma.$executeRawUnsafe(`UPDATE "Product" SET "gallery" = ARRAY['/images/product/W9.png', '/images/product/W10.png', '/images/product/W11.png', '/images/product/W12.png', '/images/size.jpeg'] WHERE "id" = 'emoji-ghibli-tote' AND cardinality("gallery") <= 1;`);
+  await prisma.$executeRawUnsafe(`UPDATE "Product" SET "gallery" = ARRAY['/images/product/W13.png', '/images/product/W14.png', '/images/product/W15.png', '/images/product/W16.png', '/images/size.jpeg'] WHERE "id" = 'polaroid-tote' AND cardinality("gallery") <= 1;`);
+  await prisma.$executeRawUnsafe(`UPDATE "Product" SET "gallery" = ARRAY['/images/product/W17.png', '/images/product/W18.png', '/images/product/W19.png', '/images/product/W20.png', '/images/size.jpeg'] WHERE "id" = 'any-design-tote' AND cardinality("gallery") <= 1;`);
   await prisma.$executeRawUnsafe(`
     UPDATE "Product"
     SET "label" = lower("category")
@@ -1447,13 +1492,15 @@ app.post('/api/products', async (req, res) => {
     await ensureCatalogCustomizationColumns();
     const data = req.body;
     const category = normalizeProductCategory(data.category);
+    const image = String(data.image || '/images/product_mockup.png').trim() || '/images/product_mockup.png';
     const product = await prisma.product.create({
       data: {
         name: data.name,
         description: data.description || '',
         price: data.price,
         oldPrice: data.oldPrice || null,
-        image: data.image,
+        image,
+        gallery: normalizeProductGallery(data.gallery, image),
         isCustomizable: category !== 'no customization',
         label: normalizeProductLabel(data.label || data.category),
         category,
@@ -1473,6 +1520,7 @@ app.put('/api/products/:id', async (req, res) => {
     await ensureCatalogCustomizationColumns();
     const data = req.body;
     const category = normalizeProductCategory(data.category);
+    const image = String(data.image || '/images/product_mockup.png').trim() || '/images/product_mockup.png';
     const product = await prisma.product.update({
       where: { id: req.params.id },
       data: {
@@ -1480,7 +1528,8 @@ app.put('/api/products/:id', async (req, res) => {
         description: data.description || '',
         price: data.price,
         oldPrice: data.oldPrice || null,
-        image: data.image,
+        image,
+        gallery: normalizeProductGallery(data.gallery, image),
         isCustomizable: category !== 'no customization',
         label: normalizeProductLabel(data.label || data.category),
         category,

@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { createJSONStorage, persist } from 'zustand/middleware';
 import { Product } from '@/lib/data/products';
 
 export interface CartItem {
@@ -31,7 +32,9 @@ interface CartStore {
   getItemCount: () => number;
 }
 
-export const useCartStore = create<CartStore>((set, get) => ({
+export const useCartStore = create<CartStore>()(
+persist(
+  (set, get) => ({
   items: [],
   isOpen: false,
 
@@ -165,4 +168,10 @@ export const useCartStore = create<CartStore>((set, get) => ({
     const { items } = get();
     return items.reduce((count, item) => count + item.quantity, 0);
   },
-}));
+  }),
+  {
+    name: "totemood_cart_v1",
+    storage: createJSONStorage(() => localStorage),
+    partialize: (state) => ({ items: state.items }),
+  }
+));
