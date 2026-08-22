@@ -28,6 +28,26 @@ const PAYMENT_SETUP_TIMEOUT_MS = 20000;
 const requiresImage = (category: string) => category === "image" || category === "image+text";
 const requiresText = (category: string) => category === "image+text";
 
+const SERVER_FIELD_TO_FORM_FIELD: Record<string, string> = {
+  customerEmail: "email",
+  customerPhone: "phone",
+  customerFirstName: "firstName",
+  customerLastName: "lastName",
+  customerAddress: "address",
+  customerCity: "city",
+  customerState: "state",
+  customerZip: "zip",
+};
+
+function mapServerFieldErrors(details: Record<string, string>) {
+  const mapped: Record<string, string> = {};
+  for (const [key, message] of Object.entries(details || {})) {
+    const formKey = SERVER_FIELD_TO_FORM_FIELD[key] || key;
+    if (!mapped[formKey]) mapped[formKey] = message;
+  }
+  return mapped;
+}
+
 interface RazorpayPaymentResponse {
   razorpay_order_id: string;
   razorpay_payment_id: string;
@@ -77,6 +97,7 @@ export default function CheckoutPage() {
   const [confirmedOrderId, setConfirmedOrderId] = useState("");
   const accountToken = useAuthStore((state) => state.token);
   const signIn = useAuthStore((state) => state.signIn);
+  const accountEmail = useAuthStore((state) => state.profile.email);
   const [savedAddresses, setSavedAddresses] = useState<SavedAddress[]>([]);
   const [selectedAddressId, setSelectedAddressId] = useState("other");
   const [saveAddress, setSaveAddress] = useState(false);
@@ -267,6 +288,12 @@ export default function CheckoutPage() {
       setFieldErrors(localErrors);
       return;
     }
+    if (accountToken && accountEmail && formValues.email.trim().toLowerCase() !== accountEmail.toLowerCase()) {
+      const message = "Use your Google account email for checkout.";
+      setFieldErrors({ email: message });
+      setCheckoutError(message);
+      return;
+    }
     const missing = missingCustomization();
     if (missing.images > 0 || missing.texts > 0) {
       const parts = [
@@ -376,11 +403,17 @@ export default function CheckoutPage() {
       });
     } catch (error: unknown) {
       console.error("Error creating order:", error);
+      let message = error instanceof Error ? error.message : "Could not place your order. Please try again.";
       if (error && typeof error === "object" && "details" in error) {
         const details = (error as { details?: Record<string, string> }).details;
-        if (details) setFieldErrors(details);
+        if (details && Object.keys(details).length > 0) {
+          const mappedErrors = mapServerFieldErrors(details);
+          setFieldErrors(mappedErrors);
+          const firstMessage = Object.values(mappedErrors)[0];
+          if (firstMessage) message = firstMessage;
+        }
       }
-      setCheckoutError(error instanceof Error ? error.message : "Could not place your order. Please try again.");
+      setCheckoutError(message);
       setIsConfirmingOrder(false);
     } finally {
       setIsProcessing(false);
@@ -615,10 +648,13 @@ export default function CheckoutPage() {
                   </div>
                 </div>
                 {accountToken && selectedAddressId === "other" && (
-                  <label className="sm:col-span-2 flex items-center gap-3 text-[14px] text-[#5A5A55]">
-                    <input type="checkbox" checked={saveAddress} onChange={(event) => setSaveAddress(event.target.checked)} className="h-4 w-4" />
-                    Save this address to my account
-                  </label>
+                  <div className="sm:col-span-2">
+                    <label className="flex items-center gap-3 text-[14px] text-[#5A5A55]">
+                      <input type="checkbox" checked={saveAddress} onChange={(event) => setSaveAddress(event.target.checked)} className="h-4 w-4" />
+                      Save this address to my account
+                    </label>
+                    {fieldErrors.saveAddress && <p className={`${errorClass} mt-2`}>{fieldErrors.saveAddress}</p>}
+                  </div>
                 )}
               </div>
             </section>

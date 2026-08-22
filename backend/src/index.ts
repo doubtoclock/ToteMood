@@ -588,7 +588,7 @@ async function buildVerifiedCheckout(data: any): Promise<PendingCheckout> {
       errors.items = `${product.name} has only ${product.inventoryCount} left in stock.`;
       return null;
     }
-    const category = String(product.category || '').trim().toLowerCase();
+    const category = normalizeProductCategory(product.category);
     const requiresImage = category === 'image' || category === 'image+text';
     const requiresText = category === 'image+text';
 
