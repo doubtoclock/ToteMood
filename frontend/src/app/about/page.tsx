@@ -2,8 +2,8 @@ import Image from "next/image";
 import Link from "next/link";
 import { Container } from "@/components/layout/Container";
 import { Section } from "@/components/layout/Section";
-
 import { WhyTotemoodExistsScroll } from "@/components/about/WhyTotemoodExistsScroll";
+import { LogoText } from "@/components/ui/LogoText";
 
 export const metadata = {
   title: "About Us | Totemood",
@@ -58,7 +58,7 @@ export default function AboutPage() {
                 />
               </div>
               <p className="text-[11px] font-bold text-[#8C867C] uppercase tracking-[0.15em] mt-4 ml-2">
-                The person behind Totemood
+                The person behind <LogoText />
               </p>
             </div>
           </div>
@@ -70,14 +70,14 @@ export default function AboutPage() {
         <Container>
           <div className="max-w-[800px] mx-auto text-center flex flex-col items-center">
             <h2 className="text-[32px] md:text-[42px] font-title text-[#252A1A] mb-8">
-              Why Totemood Exists
+              Why <LogoText /> Exists
             </h2>
             <div className="text-[18px] md:text-[22px] text-[#5A5A55] leading-[1.7] space-y-8">
               <p>
                 We noticed that giving gifts had become a transaction—something bought quickly and forgotten easily. But the most meaningful relationships deserve more than generic items off a shelf.
               </p>
               <p>
-                Totemood exists to turn fleeting memories and deep emotions into tangible keepsakes. We believe that when you give something deeply personal, you aren&apos;t just giving an object; you are giving a feeling, a memory, a piece of your shared history.
+                <LogoText /> exists to turn fleeting memories and deep emotions into tangible keepsakes. We believe that when you give something deeply personal, you aren&apos;t just giving an object; you are giving a feeling, a memory, a piece of your shared history.
               </p>
             </div>
           </div>

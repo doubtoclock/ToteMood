@@ -2,6 +2,12 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { Rokkitt } from 'next/font/google';
+
+const logoFont = Rokkitt({ 
+  weight: ['600'],
+  subsets: ['latin'],
+});
 
 const WHATSAPP_URL = "https://wa.me/919890842755";
 const INSTAGRAM_URL = "https://instagram.com/totemood_gifts";
@@ -17,8 +23,8 @@ export function Footer() {
         <div className="flex flex-col md:flex-row justify-between items-start gap-12">
           {/* Brand */}
           <div className="flex flex-col gap-4">
-            <Link href="/" className="font-script text-4xl md:text-5xl text-white">
-              Totemood
+            <Link href="/" className={`${logoFont.className} uppercase text-4xl md:text-5xl text-transparent bg-clip-text bg-gradient-to-r from-fuchsia-600 via-rose-500 to-orange-400 drop-shadow-[0_2px_4px_rgba(225,29,72,0.3)]`}>
+              TOTEMOOD
             </Link>
             <p className="text-[14px] text-white/50 max-w-[280px] leading-relaxed">
               Personalised tote bags. Every piece tells your story.

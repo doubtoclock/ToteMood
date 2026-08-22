@@ -5,7 +5,7 @@ import { io } from "socket.io-client";
 import { Product, products as staticProducts } from "@/lib/data/products";
 import { apiFetch, ENABLE_REALTIME, SOCKET_URL } from "@/lib/api";
 
-const CACHE_KEY = "totemood_products_cache_v7";
+const CACHE_KEY = "totemood_products_cache_v8";
 const PRODUCT_LABELS = ["bestseller", "new", "premium"] as const;
 const CUSTOMIZATION_CATEGORIES = ["image", "image+text", "no customization"] as const;
 
@@ -56,8 +56,8 @@ function getProductGallery(product: Product): string[] {
     gallery.unshift(product.image);
   }
   
-  if (!gallery.includes("/images/size.jpeg")) {
-    gallery.push("/images/size.jpeg");
+  if (!gallery.includes("/images/size.png")) {
+    gallery.push("/images/size.png");
   }
   
   return gallery;

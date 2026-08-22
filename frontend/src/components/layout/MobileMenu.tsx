@@ -7,6 +7,13 @@ import { useEffect, useState } from "react";
 import { usePathname } from "next/navigation";
 import Image from "next/image";
 import { useAuthStore } from "@/lib/store/useAuthStore";
+import { Rokkitt } from 'next/font/google';
+import { LogoText } from "@/components/ui/LogoText";
+
+const logoFont = Rokkitt({ 
+  weight: ['600'],
+  subsets: ['latin'],
+});
 
 interface MobileMenuProps {
   isOpen: boolean;
@@ -59,8 +66,8 @@ export function MobileMenu({ isOpen, onClose }: MobileMenuProps) {
             className="fixed top-0 right-0 bottom-0 z-[70] w-[80vw] max-w-[320px] bg-background px-6 py-6 border-l border-border flex flex-col"
           >
             <div className="flex items-center justify-between">
-              <span className="font-script text-2xl tracking-tight text-foreground">
-                Totemood
+              <span className={`${logoFont.className} uppercase text-3xl tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-fuchsia-600 via-rose-500 to-orange-400 drop-shadow-[0_2px_4px_rgba(225,29,72,0.3)]`}>
+                TOTEMOOD
               </span>
               <button
                 aria-label="Close menu"
@@ -156,8 +163,8 @@ export function MobileMenu({ isOpen, onClose }: MobileMenuProps) {
             <div className="fixed inset-0 z-[80] flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm">
               <div className="bg-white rounded-[24px] p-7 w-full max-w-[360px] shadow-2xl border border-[#E8E5DC]">
                 <h3 className="text-[20px] font-title text-[#252A1A] mb-3">Log out?</h3>
-                <p className="text-[14px] text-[#5A5A55] mb-7 leading-relaxed">
-                  Are you sure you want to log out of your Totemood account?
+                <p className="text-[#5A5A55] mb-8">
+                  Are you sure you want to log out of your <LogoText /> account?
                 </p>
                 <div className="flex gap-3">
                   <button

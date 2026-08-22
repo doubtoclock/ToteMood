@@ -4,6 +4,7 @@ import React, { useRef } from "react";
 import { motion, useScroll, useTransform } from "framer-motion";
 import Image from "next/image";
 import { Container } from "@/components/layout/Container";
+import { LogoText } from "@/components/ui/LogoText";
 
 export function HowItStartedScroll() {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -76,8 +77,8 @@ export function HowItStartedScroll() {
                 <p>
                   It began with a simple desire: to make something by hand that meant something to someone. The first pieces were created at a small desk, fueled by a passion for design and a deep appreciation for human connection.
                 </p>
-                <p>
-                  What started as a personal creative outlet quickly resonated with people who were looking for ways to express love without relying on mass-produced goods. Slowly, carefully, Totemood grew into a dedicated studio.
+                <p className="text-[18px] md:text-[22px] text-[#5A5A55] leading-[1.7]">
+                  What started as a personal creative outlet quickly resonated with people who were looking for ways to express love without relying on mass-produced goods. Slowly, carefully, <LogoText /> grew into a dedicated studio.
                 </p>
                 <p>
                   Today, every piece we craft still carries that original intention. We don&apos;t just process orders; we carefully assemble the fragments of your stories into art you can hold.

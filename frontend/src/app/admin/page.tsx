@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { ShoppingBag, IndianRupee, Package } from "lucide-react";
 import { apiFetch } from "@/lib/api";
+import { LogoText } from "@/components/ui/LogoText";
 import {
   AreaChart,
   Area,
@@ -83,7 +84,7 @@ export default function AdminDashboard() {
     <div className="space-y-8">
       <div>
         <h1 className="text-3xl font-serif text-[#1C1C1A]">Dashboard</h1>
-        <p className="text-[#5A5A55] mt-2">Welcome back to the ToteMood admin panel.</p>
+        <p className="text-[#5A5A55] mt-2">Welcome back to the <LogoText /> admin panel.</p>
       </div>
 
       {/* Metric Cards */}

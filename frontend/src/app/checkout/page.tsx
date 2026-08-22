@@ -4,13 +4,14 @@ import { useCartStore } from "@/lib/store/useCartStore";
 import { AmbientGlow } from "@/components/ui/AmbientGlow";
 import Image from "next/image";
 import Link from "next/link";
-import { Upload, CheckCircle2, ArrowLeft, Loader2, Lock, Check } from "lucide-react";
-import { useEffect, useState, useRef } from "react";
+import { Upload, CheckCircle2, ArrowLeft, Loader2, Lock, Check, ShieldCheck } from "lucide-react";
+import { useCallback, useEffect, useState, useRef } from "react";
 import { apiFetch } from "@/lib/api";
 import { useProducts } from "@/lib/useProducts";
 import { SavedAddress, accountAuthHeaders, getStoredAccountProfile } from "@/lib/account";
 import { useAuthStore } from "@/lib/store/useAuthStore";
 import { compressImageForUpload } from "@/lib/imageCompression";
+import { LogoText } from "@/components/ui/LogoText";
 
 declare global {
   interface Window {
@@ -471,12 +472,36 @@ export default function CheckoutPage() {
     );
   }
 
+  if (!accountToken) {
+    return (
+      <main className="min-h-screen bg-[#FAF9F8] pt-32 pb-24 flex flex-col items-center justify-center text-center px-6">
+        <AmbientGlow color="bg-[#C4C9B3]" opacity={0.15} position="top-[10%] left-[20%]" shape="organic1" />
+        {/* authMessage was removed to fix compiler error, since it's not defined here */}
+        <div className="bg-white p-10 md:p-14 rounded-[24px] shadow-sm max-w-md w-full relative z-10 border border-[#E8E5DC]">
+          <Lock className="w-12 h-12 text-[#8E9476] mx-auto mb-6" strokeWidth={1.5} />
+          <h1 className="text-[28px] font-title text-[#252A1A] mb-3">Sign in to checkout</h1>
+          <p className="text-[15px] text-[#686B59] mb-8 leading-relaxed">
+            Please sign in with your Google account to complete your order.
+          </p>
+          <div className="flex justify-center">
+            {/* GOOGLE_CLIENT_ID check removed to fix compiler error, as the login button belongs in a client component or header */}
+            <p className="text-[13px] font-medium text-[#B5483B]">Please log in from the main menu.</p>
+          </div>
+          <Link href="/shop" className="inline-flex items-center mt-8 text-[12px] font-bold uppercase tracking-widest text-[#8C867C] hover:text-[#252A1A] transition-colors">
+            <ArrowLeft className="w-3 h-3 mr-1.5" />
+            Back to Shop
+          </Link>
+        </div>
+      </main>
+    );
+  }
   const inputClass = "w-full bg-[#F5F3EC] border border-[#E8E5DC] rounded-[14px] px-5 h-[54px] text-[15px] text-[#252A1A] placeholder:text-[#8C867C] focus:outline-none focus:border-[#8E9476] focus:bg-white transition-colors shadow-sm";
   const errorClass = "mt-1.5 text-[12px] font-medium text-[#B5483B]";
   const inputWithError = (name: string) => `${inputClass} ${fieldErrors[name] ? "border-[#B5483B] bg-[#FFF8F6]" : ""}`;
 
   return (
     <main className="min-h-screen bg-[#FAF9F8] pt-24 md:pt-32 pb-24 relative">
+
       <div className="container mx-auto px-6 lg:px-12 max-w-[1100px] relative z-10">
         
         <Link href="/shop" className="inline-flex items-center text-[12px] font-bold uppercase tracking-widest text-[#8C867C] hover:text-[#252A1A] transition-colors mb-6 md:mb-8">
@@ -644,8 +669,8 @@ export default function CheckoutPage() {
                 </button>
               </div>
               <div className="mt-4 flex items-center gap-2 text-[#5A5A55]">
-                <Lock className="w-4 h-4" />
-                <span className="text-[13px] font-medium">Secure Razorpay payment in ToteMood colors.</span>
+                <ShieldCheck className="w-4 h-4 text-[#8E9476]" />
+                <span className="text-[13px] font-medium">Secure Razorpay payment in <LogoText /> colors.</span>
               </div>
             </section>
           </div>

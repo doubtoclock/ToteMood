@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Image from "next/image";
 import { Section } from "@/components/layout/Section";
 import { AmbientGlow } from "@/components/ui/AmbientGlow";
+import { LogoText } from "@/components/ui/LogoText";
 import { apiFetch } from "@/lib/api";
 import { loadGoogleIdentity, renderGoogleSignInButton } from "@/lib/googleSignIn";
 import {
@@ -565,7 +566,7 @@ export function AccountContent() {
 
       {message && (
         <div className="fixed left-1/2 top-24 z-[80] w-[calc(100%-32px)] max-w-sm -translate-x-1/2 rounded-[18px] border border-[#E8E5DC] bg-white px-5 py-4 text-center shadow-[0_18px_50px_rgba(37,42,26,0.12)]">
-          <p className="text-[12px] font-bold uppercase tracking-[0.16em] text-[#8E9476]">Totemood</p>
+          <p className="text-[12px] font-bold uppercase tracking-[0.16em] text-[#8E9476]"><LogoText /></p>
           <p className="mt-1 text-[14px] font-medium text-[#252A1A]">{message}</p>
         </div>
       )}

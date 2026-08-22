@@ -11,12 +11,11 @@ import { useCartStore } from "@/lib/store/useCartStore";
 import { useAuthStore } from "@/lib/store/useAuthStore";
 import { CartDrawer } from "@/components/cart/CartDrawer";
 import { ACCOUNT_AUTH_CHANGED_EVENT } from "@/lib/account";
-import { Playfair_Display } from 'next/font/google';
+import { Rokkitt } from 'next/font/google';
 
-const elegantFont = Playfair_Display({ 
-  weight: ['600', '700'],
+const logoFont = Rokkitt({ 
+  weight: ['600'],
   subsets: ['latin'],
-  style: 'italic',
 });
 
 export function Navbar() {
@@ -79,9 +78,9 @@ export function Navbar() {
           <div className="flex-1 flex justify-start">
             <Link
               href="/"
-              className={`${elegantFont.className} text-3xl md:text-4xl tracking-wide text-transparent bg-clip-text bg-gradient-to-r from-fuchsia-600 via-rose-500 to-orange-400 drop-shadow-[0_2px_4px_rgba(225,29,72,0.3)] hover:scale-105 transition-transform origin-left focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary rounded-sm`}
+              className={`${logoFont.className} uppercase text-3xl md:text-4xl tracking-wide text-transparent bg-clip-text bg-gradient-to-r from-fuchsia-600 via-rose-500 to-orange-400 drop-shadow-[0_2px_4px_rgba(225,29,72,0.3)] hover:scale-105 transition-transform origin-left focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary rounded-sm`}
             >
-              Totemood
+              TOTEMOOD
             </Link>
           </div>
 

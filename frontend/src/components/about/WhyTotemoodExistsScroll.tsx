@@ -4,6 +4,7 @@ import React, { useRef } from "react";
 import { motion, useScroll, useTransform } from "framer-motion";
 import Image from "next/image";
 import { Container } from "@/components/layout/Container";
+import { LogoText } from "@/components/ui/LogoText";
 
 export function WhyTotemoodExistsScroll() {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -26,8 +27,8 @@ export function WhyTotemoodExistsScroll() {
             
             {/* Header Text */}
             <div className="flex flex-col items-center text-center z-20">
-              <p className="text-[14px] md:text-[16px] text-[#C25858] font-bold uppercase tracking-[0.2em] mb-4">
-                BUILDING TOTEMOOD
+              <p className="text-[20px] md:text-[24px] text-[#C25858] font-bold uppercase tracking-[0.2em] mb-4 flex items-center gap-2">
+                BUILDING <LogoText className="text-[24px] md:text-[28px]" />
               </p>
               <h1 className="text-[52px] md:text-[72px] font-title text-[#252A1A] leading-[1.1] tracking-tight">
                 Siya Maurya

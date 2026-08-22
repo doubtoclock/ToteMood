@@ -27,11 +27,11 @@ export function ToteModel(props: React.ComponentProps<'group'> & { textureIndex?
   const { gl } = useThree()
   
   const textureArray = useTexture([
-    '/images/illustration1.png',
-    '/images/illustration2.png',
-    '/images/illustration3.png',
-    '/images/illustration4.png',
-    '/images/illustration5.png'
+    '/images/illustration/1.png',
+    '/images/illustration/2.png',
+    '/images/illustration/3.png',
+    '/images/illustration/4.png',
+    '/images/illustration/5.png'
   ]);
   
   // Pre-create a material for each texture so we can crossfade them smoothly
@@ -61,6 +61,21 @@ export function ToteModel(props: React.ComponentProps<'group'> & { textureIndex?
       mat.toneMapped = false
       // Initialize only the first material as visible
       mat.opacity = i === 0 ? 1 : 0 
+      
+      // Fix edge smearing for ClampToEdgeWrapping by making out-of-bounds UVs transparent
+      mat.onBeforeCompile = (shader) => {
+        shader.fragmentShader = shader.fragmentShader.replace(
+          '#include <map_fragment>',
+          `
+          #include <map_fragment>
+          #ifdef USE_MAP
+            if (vMapUv.x < 0.01 || vMapUv.x > 0.99 || vMapUv.y < 0.01 || vMapUv.y > 0.99) {
+              diffuseColor.a = 0.0;
+            }
+          #endif
+          `
+        );
+      };
       
       // Fix z-fighting against the base canvas, AND against the other decal layers during crossfade
       mat.depthWrite = false
@@ -101,9 +116,9 @@ export function ToteModel(props: React.ComponentProps<'group'> & { textureIndex?
 
 useGLTF.preload('/3Dmodel/tote_web.glb')
 useTexture.preload([
-  '/images/illustration1.png',
-  '/images/illustration2.png',
-  '/images/illustration3.png',
-  '/images/illustration4.png',
-  '/images/illustration5.png'
+  '/images/illustration/1.png',
+  '/images/illustration/2.png',
+  '/images/illustration/3.png',
+  '/images/illustration/4.png',
+  '/images/illustration/5.png'
 ])

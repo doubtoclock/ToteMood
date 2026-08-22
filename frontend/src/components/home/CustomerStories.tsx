@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Section } from "@/components/layout/Section";
 import { AmbientGlow } from "@/components/ui/AmbientGlow";
+import { LogoText } from "@/components/ui/LogoText";
 import Image from "next/image";
 import { PlayCircle, X } from "lucide-react";
 
@@ -57,10 +58,10 @@ export function CustomerStories() {
             <h2 className="text-3xl sm:text-4xl md:text-5xl lg:text-[56px] font-serif text-[#1C1C1A] leading-[1.15] tracking-tight mb-4">
               Honest Customer Reviews
               <br />
-              <span className="text-[#b06161] italic">from Totemood.</span>
+              <span className="text-[#b06161] italic">from <LogoText />.</span>
             </h2>
             <p className="text-[#5A5A55] text-lg">
-              See what our community is saying about their Totemood experience.
+              See what our community is saying about their <LogoText /> experience.
             </p>
           </div>
         </div>
