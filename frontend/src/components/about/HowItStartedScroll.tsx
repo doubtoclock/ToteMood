@@ -19,21 +19,22 @@ export function HowItStartedScroll() {
 
   return (
     <div ref={containerRef} className="relative w-full h-[250vh]">
-      <div className="sticky top-0 w-full h-[100svh] flex items-center bg-[#FAF9F8] overflow-hidden">
+      <div className="sticky top-0 w-full h-[100svh] flex items-center bg-[#FAF9F8] overflow-hidden pt-[140px] pb-8 lg:py-0">
         <Container className="w-full relative z-10">
-          <div className="flex flex-col lg:flex-row items-center justify-between gap-12 lg:gap-20">
+          <div className="flex flex-col lg:flex-row items-center justify-between gap-6 lg:gap-20">
             
             {/* Left Column: Image with Wipe Effect */}
             <div className="w-full lg:w-1/2 flex justify-center">
-              <div className="relative w-full max-w-[400px] aspect-[4/5] md:aspect-[3/4] rounded-[24px] overflow-hidden border border-[#E8E5DC] shadow-xl bg-[#F5F3EC]">
+              <div className="relative w-full max-w-[220px] sm:max-w-[320px] lg:max-w-[400px] aspect-[4/5] md:aspect-[3/4] rounded-[16px] lg:rounded-[24px] overflow-hidden border border-[#E8E5DC] shadow-xl bg-[#F5F3EC]">
                 
                 {/* Base Image (Before) */}
                 <div className="absolute inset-0">
                   <Image 
-                    src="/siya2.png" 
+                    src="/siya2.jpeg" 
                     alt="Original Photo" 
                     fill 
-                    className="object-contain object-top"
+                    className="object-cover object-top"
+                    sizes="(max-width: 768px) 100vw, 400px"
                   />
                 </div>
 
@@ -46,7 +47,8 @@ export function HowItStartedScroll() {
                     src="/siya_ghibli.png" 
                     alt="Ghibli Version" 
                     fill 
-                    className="object-contain object-top"
+                    className="object-cover object-top"
+                    sizes="(max-width: 768px) 100vw, 400px"
                   />
                 </motion.div>
 
@@ -66,11 +68,11 @@ export function HowItStartedScroll() {
             </div>
 
             {/* Right Column: Text */}
-            <div className="w-full lg:w-[45%]">
-              <h2 className="text-[32px] md:text-[42px] font-title text-[#252A1A] mb-6">
+            <div className="w-full lg:w-[45%] text-center lg:text-left">
+              <h2 className="text-[26px] md:text-[42px] font-title text-[#252A1A] mb-3 md:mb-6">
                 How It Started
               </h2>
-              <div className="space-y-6 text-[17px] md:text-[18px] text-[#5A5A55] leading-[1.7]">
+              <div className="space-y-3 md:space-y-6 text-[14px] md:text-[18px] text-[#5A5A55] leading-[1.6] md:leading-[1.7]">
                 <p>
                   It began with a simple desire: to make something by hand that meant something to someone. The first pieces were created at a small desk, fueled by a passion for design and a deep appreciation for human connection.
                 </p>
