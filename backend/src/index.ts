@@ -51,7 +51,7 @@ const corsOptions: cors.CorsOptions = {
 
 // Middleware
 app.use(cors(corsOptions));
-app.use(express.json({ limit: '4mb' }));
+app.use(express.json({ limit: '12mb' }));
 app.use((error: unknown, _req: Request, res: Response, next: NextFunction) => {
   if (error && typeof error === 'object' && 'type' in error && error.type === 'entity.too.large') {
     return res.status(413).json({

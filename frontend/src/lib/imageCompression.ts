@@ -1,5 +1,5 @@
-const MAX_UPLOAD_FILE_BYTES = 8 * 1024 * 1024;
-const MAX_COMPRESSED_IMAGE_BYTES = 240 * 1024;
+const MAX_UPLOAD_FILE_BYTES = 25 * 1024 * 1024;
+const MAX_COMPRESSED_IMAGE_BYTES = 180 * 1024;
 const COMPRESSED_IMAGE_MAX_DIMENSION = 900;
 
 const loadImage = (file: File) =>
@@ -41,36 +41,44 @@ export async function compressImageForUpload(file: File) {
     throw new Error("Please upload a JPG or PNG image.");
   }
   if (file.size > MAX_UPLOAD_FILE_BYTES) {
-    throw new Error("Please upload an image under 8MB.");
+    throw new Error("Please upload an image under 25MB.");
   }
 
   const image = await loadImage(file);
-  const scale = Math.min(1, COMPRESSED_IMAGE_MAX_DIMENSION / Math.max(image.width, image.height));
-  const width = Math.max(1, Math.round(image.width * scale));
-  const height = Math.max(1, Math.round(image.height * scale));
   const canvas = document.createElement("canvas");
-  canvas.width = width;
-  canvas.height = height;
 
   const context = canvas.getContext("2d");
   if (!context) {
     throw new Error("Your browser could not prepare this image. Please try again.");
   }
 
-  context.fillStyle = "#ffffff";
-  context.fillRect(0, 0, width, height);
-  context.drawImage(image, 0, 0, width, height);
+  const qualities = [0.78, 0.68, 0.58, 0.48, 0.38, 0.28];
+  let maxDimension = COMPRESSED_IMAGE_MAX_DIMENSION;
+  let bestBlob: Blob | null = null;
 
-  const qualities = [0.78, 0.68, 0.58, 0.48, 0.38];
-  let bestBlob = await canvasToBlob(canvas, qualities[0]);
+  while (maxDimension >= 360) {
+    const scale = Math.min(1, maxDimension / Math.max(image.width, image.height));
+    const width = Math.max(1, Math.round(image.width * scale));
+    const height = Math.max(1, Math.round(image.height * scale));
+    canvas.width = width;
+    canvas.height = height;
 
-  for (const quality of qualities.slice(1)) {
-    if (bestBlob.size <= MAX_COMPRESSED_IMAGE_BYTES) break;
-    bestBlob = await canvasToBlob(canvas, quality);
+    context.fillStyle = "#ffffff";
+    context.fillRect(0, 0, width, height);
+    context.drawImage(image, 0, 0, width, height);
+
+    for (const quality of qualities) {
+      bestBlob = await canvasToBlob(canvas, quality);
+      if (bestBlob.size <= MAX_COMPRESSED_IMAGE_BYTES) {
+        return blobToDataUrl(bestBlob);
+      }
+    }
+
+    maxDimension = Math.floor(maxDimension * 0.75);
   }
 
-  if (bestBlob.size > MAX_COMPRESSED_IMAGE_BYTES) {
-    throw new Error("This image is still too large. Please crop it or choose a smaller image.");
+  if (!bestBlob) {
+    throw new Error("This image could not be prepared. Please try a different image.");
   }
 
   return blobToDataUrl(bestBlob);

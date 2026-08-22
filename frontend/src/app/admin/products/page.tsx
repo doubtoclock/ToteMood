@@ -54,6 +54,7 @@ export default function AdminProducts() {
   const [gallery, setGallery] = useState<string[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isDragOver, setIsDragOver] = useState(false);
+  const [isGalleryUploading, setIsGalleryUploading] = useState(false);
   const coverFileInputRef = useRef<HTMLInputElement>(null);
   const galleryFileInputRef = useRef<HTMLInputElement>(null);
 
@@ -92,8 +93,21 @@ export default function AdminProducts() {
   };
 
   const processGalleryFiles = async (files: FileList | File[]) => {
+    const selectedFiles = Array.from(files);
+    if (selectedFiles.length === 0) return;
+
+    setIsGalleryUploading(true);
     try {
-      const results = await Promise.all(Array.from(files).map((file) => compressImageForUpload(file)));
+      const settled = await Promise.allSettled(selectedFiles.map((file) => compressImageForUpload(file)));
+      const results = settled
+        .filter((result): result is PromiseFulfilledResult<string> => result.status === "fulfilled")
+        .map((result) => result.value);
+
+      if (results.length === 0) {
+        const firstError = settled.find((result): result is PromiseRejectedResult => result.status === "rejected");
+        throw firstError?.reason || new Error("Could not upload these images.");
+      }
+
       setGallery((current) => {
         const next = [...current];
         for (const result of results) {
@@ -101,8 +115,18 @@ export default function AdminProducts() {
         }
         return next;
       });
+      if (!image && results[0]) {
+        setImage(results[0]);
+        setImagePreview(results[0]);
+      }
+      const failedCount = settled.length - results.length;
+      if (failedCount > 0) {
+        alert(`${results.length} image${results.length === 1 ? "" : "s"} added. ${failedCount} image${failedCount === 1 ? "" : "s"} could not be processed.`);
+      }
     } catch (error) {
-      alert(error instanceof Error ? error.message : "Could not upload one of these images.");
+      alert(error instanceof Error ? error.message : "Could not upload these images.");
+    } finally {
+      setIsGalleryUploading(false);
     }
   };
 
@@ -428,7 +452,7 @@ export default function AdminProducts() {
                         onClick={() => galleryFileInputRef.current?.click()}
                         className="inline-flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-widest text-[#757D5C] hover:text-[#1C1C1A]"
                       >
-                        <Plus className="w-3 h-3" /> Add images
+                        <Plus className="w-3 h-3" /> {isGalleryUploading ? "Adding..." : "Add images"}
                       </button>
                     </div>
                     <input
@@ -439,7 +463,14 @@ export default function AdminProducts() {
                       onChange={handleGalleryFileChange}
                       className="hidden"
                     />
-                    <div className="grid grid-cols-4 gap-2">
+                    <div
+                      className="grid grid-cols-4 gap-2"
+                      onDragOver={(event) => event.preventDefault()}
+                      onDrop={(event) => {
+                        event.preventDefault();
+                        if (event.dataTransfer.files.length > 0) void processGalleryFiles(event.dataTransfer.files);
+                      }}
+                    >
                       {gallery.map((galleryImage, index) => (
                         <div key={`${galleryImage}-${index}`} className="relative aspect-square overflow-hidden rounded-lg border border-[#1C1C1A]/10 bg-[#F8F6EF]">
                           <Image src={galleryImage} alt={`Gallery image ${index + 1}`} fill className="object-cover" />
@@ -468,7 +499,7 @@ export default function AdminProducts() {
                           onClick={() => galleryFileInputRef.current?.click()}
                           className="col-span-4 h-20 rounded-xl border border-dashed border-[#1C1C1A]/20 text-sm font-bold text-[#5A5A55] hover:border-[#757D5C]/50"
                         >
-                          Upload gallery images
+                          {isGalleryUploading ? "Adding images..." : "Upload or drop gallery images"}
                         </button>
                       )}
                     </div>
