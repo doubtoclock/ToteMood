@@ -72,7 +72,7 @@ export default function ProductPage() {
         <ProductFeatures productName={product.name} />
 
         {/* 3. Customer Reviews */}
-        <ProductReviews productId={product.id} />
+        <ProductReviews />
 
         {/* 4. Frequently Asked Questions */}
         <ProductFAQ />

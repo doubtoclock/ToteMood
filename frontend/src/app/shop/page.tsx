@@ -38,11 +38,11 @@ export default function ShopPage() {
 
       {/* 2. Product Discovery */}
       <section id="all-products" className="pt-0 pb-16 md:pt-2 md:pb-24 bg-[#FAF9F8]">
-        <div className="container mx-auto px-6 lg:px-12">
+        <div className="container mx-auto px-4 sm:px-6 lg:px-12">
           {loading ? (
             <ShopSkeleton />
           ) : (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-8 md:gap-10">
+            <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 sm:gap-8 md:gap-10">
               {products.map((product, index) => (
                 <div
                   key={product.id}
@@ -62,40 +62,33 @@ export default function ShopPage() {
                     />
                   </Link>
                   
-                  {/* Customization Badge */}
-                  {product.isCustomizable && (
-                    <div className="absolute top-4 left-4 bg-[#F5F3EC] px-3 py-1.5 rounded-[6px] shadow-sm z-10 border border-[#E8E5DC]/50">
-                      <span className="text-[10px] font-bold uppercase tracking-widest text-[#252A1A]">
-                        Custom
-                      </span>
-                    </div>
-                  )}
+
 
                   {/* Cart Icon Hover */}
                   <button
                     type="button"
                     aria-label={`Add ${product.name} to cart`}
                     onClick={() => addItem(product)}
-                    className="absolute bottom-4 right-4 bg-white/90 backdrop-blur-sm w-10 h-10 rounded-full shadow-sm flex items-center justify-center opacity-0 transform translate-y-2 group-hover:opacity-100 group-hover:translate-y-0 transition-all duration-300 z-10 text-[#252A1A] hover:bg-[#252A1A] hover:text-white"
+                    className="absolute bottom-2 right-2 sm:bottom-4 sm:right-4 bg-white/90 backdrop-blur-sm w-8 h-8 sm:w-10 sm:h-10 rounded-full shadow-sm flex items-center justify-center opacity-0 transform translate-y-2 group-hover:opacity-100 group-hover:translate-y-0 transition-all duration-300 z-10 text-[#252A1A] hover:bg-[#252A1A] hover:text-white"
                   >
-                    <ShoppingCart className="w-[18px] h-[18px]" strokeWidth={1.5} />
+                    <ShoppingCart className="w-[14px] h-[14px] sm:w-[18px] sm:h-[18px]" strokeWidth={1.5} />
                   </button>
                 </div>
 
                 {/* Product Info */}
                 <Link href={`/shop/${product.id}`} className="flex flex-col flex-grow px-1">
-                  <div className="flex items-start justify-between gap-4 mb-2">
-                    <h3 className="text-[16px] font-medium text-[#252A1A] leading-snug line-clamp-2 h-[44px]">
-                      {product.name}
+                  <div className="flex items-start justify-between gap-2 sm:gap-4 mb-1 sm:mb-2">
+                    <h3 className="text-[13px] sm:text-[16px] font-bold font-sans text-[#1C1C1A] leading-snug whitespace-nowrap overflow-hidden">
+                      {product.name.length > 28 ? product.name.substring(0, 28) + '...' : product.name}
                     </h3>
                   </div>
                   
-                  <div className="flex items-center gap-2 mb-3">
-                    <span className="text-[15px] font-bold text-[#252A1A]">
+                  <div className="flex flex-wrap items-center gap-1.5 sm:gap-2 mb-2 sm:mb-3">
+                    <span className="text-[13px] sm:text-[15px] font-bold text-[#252A1A]">
                       ₹{product.price.toFixed(2)}
                     </span>
                     {product.oldPrice && (
-                      <span className="text-[13px] text-[#8C867C] line-through">
+                      <span className="text-[11px] sm:text-[13px] text-[#8C867C] line-through">
                         ₹{product.oldPrice.toFixed(2)}
                       </span>
                     )}
@@ -103,13 +96,13 @@ export default function ShopPage() {
                   
                   <div className="flex items-center mt-auto">
                     {/* Rating Stars */}
-                    <div className="flex items-center gap-1.5">
+                    <div className="flex items-center gap-1 sm:gap-1.5">
                       <div className="flex text-[#b06161]">
                         {[...Array(5)].map((_, i) => (
-                          <Star key={i} className="w-[12px] h-[12px] fill-current" strokeWidth={0} />
+                          <Star key={i} className="w-[10px] h-[10px] sm:w-[12px] sm:h-[12px] fill-current" strokeWidth={0} />
                         ))}
                       </div>
-                      <span className="text-[12px] text-[#8C867C]">
+                      <span className="text-[10px] sm:text-[12px] text-[#8C867C]">
                         ({product.reviews && product.reviews > 0 ? product.reviews : 142})
                       </span>
                     </div>

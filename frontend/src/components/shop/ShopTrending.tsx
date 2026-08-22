@@ -43,14 +43,6 @@ export function ShopTrending() {
                   />
                 </Link>
                 
-                {/* Sale / Custom Badge */}
-                {product.isCustomizable ? (
-                  <div className="absolute top-3 left-3 bg-[#757D5C] px-2 py-1 rounded-[4px] z-10">
-                    <span className="text-[10px] font-bold uppercase tracking-wider text-white">
-                      Custom
-                    </span>
-                  </div>
-                ) : null}
               </div>
 
               {/* Product Info */}

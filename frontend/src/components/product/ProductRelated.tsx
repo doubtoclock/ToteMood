@@ -9,7 +9,7 @@ export function ProductRelated({ currentProductId, products }: { currentProductI
 
   return (
     <section className="py-16 md:py-24 bg-white">
-      <div className="container mx-auto px-6 lg:px-12">
+      <div className="container mx-auto px-4 sm:px-6 lg:px-12">
         <div className="flex justify-between items-center mb-10">
           <h2 className="text-xl md:text-2xl font-sans font-bold text-[#1C1C1A] uppercase tracking-wider">
             Related Products
@@ -24,7 +24,7 @@ export function ProductRelated({ currentProductId, products }: { currentProductI
           </div>
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 md:gap-8">
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-6 md:gap-8">
           {relatedProducts.map((product: Product, index: number) => (
             <Link 
               href={`/shop/${product.id}`} 
@@ -46,27 +46,27 @@ export function ProductRelated({ currentProductId, products }: { currentProductI
 
               {/* Product Info */}
               <div className="flex flex-col px-1">
-                <h3 className="text-base font-bold text-[#1C1C1A] leading-tight font-sans mb-1 line-clamp-1">
+                <h3 className="text-[13px] sm:text-base font-bold text-[#1C1C1A] leading-tight font-sans mb-1 line-clamp-1">
                   {product.name}
                 </h3>
                 
                 {/* Rating */}
-                <div className="flex items-center gap-1 mb-2">
+                <div className="flex items-center gap-1 mb-1.5 sm:mb-2">
                   <div className="flex text-[#F5C518]">
                     {[...Array(5)].map((_, i) => (
-                      <Star key={i} className={`w-3.5 h-3.5 ${i < Math.floor(product.rating) ? 'fill-current' : ''}`} />
+                      <Star key={i} className={`w-2.5 h-2.5 sm:w-3.5 sm:h-3.5 ${i < Math.floor(product.rating) ? 'fill-current' : ''}`} />
                     ))}
                   </div>
-                  <span className="text-xs font-medium text-[#5A5A55] ml-1">({product.reviews})</span>
+                  <span className="text-[10px] sm:text-xs font-medium text-[#5A5A55] ml-1">({product.reviews})</span>
                 </div>
 
                 {/* Price */}
-                <div className="flex items-center gap-2">
-                  <span className="text-base font-bold text-[#1C1C1A]">
+                <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
+                  <span className="text-[13px] sm:text-base font-bold text-[#1C1C1A]">
                     ₹{product.price.toFixed(2)}
                   </span>
                   {product.oldPrice && (
-                    <span className="text-xs text-[#8C867C] line-through">
+                    <span className="text-[10px] sm:text-xs text-[#8C867C] line-through">
                       ₹{product.oldPrice.toFixed(2)}
                     </span>
                   )}

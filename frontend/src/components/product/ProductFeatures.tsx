@@ -12,7 +12,7 @@ export function ProductFeatures({ productName }: { productName: string }) {
             </div>
             <h3 className="text-[16px] font-extrabold text-[#B55E5B] uppercase tracking-widest mb-2">Premium Quality</h3>
             <p className="text-[15px] text-[#686B59] leading-[1.6]">
-              300 GSM cotton canvas, built for lasting strength and everyday use.
+              300 GSM cotton, built for lasting strength and everyday use.
             </p>
           </div>
 

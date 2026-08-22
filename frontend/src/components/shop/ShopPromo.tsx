@@ -139,7 +139,7 @@ export function ShopPromo() {
           <div className="relative h-[35%] w-full overflow-hidden">
             <Image 
               src="/images/feature_premium_canvas.png" 
-              alt="Premium Canvas Texture" 
+              alt="Premium Texture" 
               fill 
               className="object-cover opacity-90 transform group-hover:scale-[1.03] transition-transform duration-700 ease-out"
               sizes="(max-width: 1024px) 100vw, 50vw"

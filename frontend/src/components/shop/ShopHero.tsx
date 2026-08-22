@@ -31,7 +31,7 @@ export function ShopHero() {
             </h1>
             
             <p className="text-lg text-[#5A5A55] max-w-lg mb-10 leading-relaxed">
-              Discover carefully crafted canvas bags designed for quality, durability, and personal expression.
+              Discover carefully crafted bags designed for quality, durability, and personal expression.
             </p>
             
             <div className="flex flex-wrap items-center gap-4">

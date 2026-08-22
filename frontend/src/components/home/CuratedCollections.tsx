@@ -168,7 +168,7 @@ export function CuratedCollections() {
             <div className="relative w-full overflow-hidden rounded-[16px] aspect-[16/9] md:aspect-[3/1]">
               <Image
                 src="/images/collection_panoramic.png"
-                alt="A premium Totemood canvas tote resting naturally in a sunlit European cafe interior"
+                alt="A premium Totemood tote resting naturally in a sunlit European cafe interior"
                 fill
                 className="object-cover"
                 sizes="100vw"

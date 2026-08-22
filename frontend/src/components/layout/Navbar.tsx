@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { ShoppingBag, Menu, LogOut } from "lucide-react";
+import { ShoppingBag, Menu, LogOut, Package } from "lucide-react";
 import Image from "next/image";
 import { motion, useScroll, useMotionValueEvent } from "framer-motion";
 import { MobileMenu } from "./MobileMenu";
@@ -11,6 +11,13 @@ import { useCartStore } from "@/lib/store/useCartStore";
 import { useAuthStore } from "@/lib/store/useAuthStore";
 import { CartDrawer } from "@/components/cart/CartDrawer";
 import { ACCOUNT_AUTH_CHANGED_EVENT } from "@/lib/account";
+import { Playfair_Display } from 'next/font/google';
+
+const elegantFont = Playfair_Display({ 
+  weight: ['600', '700'],
+  subsets: ['latin'],
+  style: 'italic',
+});
 
 export function Navbar() {
   const [isScrolled, setIsScrolled] = useState(false);
@@ -72,7 +79,7 @@ export function Navbar() {
           <div className="flex-1 flex justify-start">
             <Link
               href="/"
-              className="font-script text-4xl md:text-5xl font-bold tracking-tight text-primary focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary rounded-sm"
+              className={`${elegantFont.className} text-3xl md:text-4xl tracking-wide text-transparent bg-clip-text bg-gradient-to-r from-fuchsia-600 via-rose-500 to-orange-400 drop-shadow-[0_2px_4px_rgba(225,29,72,0.3)] hover:scale-105 transition-transform origin-left focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary rounded-sm`}
             >
               Totemood
             </Link>
@@ -113,6 +120,16 @@ export function Navbar() {
 
           {/* Right: Actions */}
           <div className="flex-1 flex justify-end items-center space-x-5 lg:space-x-6">
+            
+            {/* My Orders */}
+            <Link
+              href="/account"
+              aria-label="My Orders"
+              className="hidden md:flex relative text-primary hover:text-primary/70 transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary rounded-sm p-1"
+            >
+              <Package className="h-5 w-5" strokeWidth={1.5} />
+            </Link>
+
             {/* Account / Login */}
             {profile ? (
               <div className="hidden md:flex items-center">

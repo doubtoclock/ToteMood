@@ -5,11 +5,11 @@ import { AmbientGlow } from "@/components/ui/AmbientGlow";
 export function MadeToCarry() {
   const features = [
     {
-      title: "Premium Canvas",
+      title: "Premium Material",
       description:
-        "Crafted from ultra-heavyweight cotton canvas, designed for exceptional durability while maintaining a luxuriously soft touch.",
+        "Crafted from ultra-heavyweight cotton, designed for exceptional durability while maintaining a luxuriously soft touch.",
       image: "/images/feature_premium_canvas.png",
-      alt: "Detailed texture of heavy cotton canvas",
+      alt: "Detailed texture of heavy cotton",
     },
     {
       title: "From Memory to Illustration",
@@ -23,7 +23,7 @@ export function MadeToCarry() {
       description:
         "Using advanced DTG technology, every tote is printed with vibrant, lasting colors that gracefully follow the fabric's natural weave.",
       image: "/images/feature_printed_care.png",
-      alt: "A beautiful canvas tote bag being carefully wrapped in crisp white tissue paper",
+      alt: "A beautiful tote bag being carefully wrapped in crisp white tissue paper",
     },
   ];
 
@@ -56,7 +56,7 @@ export function MadeToCarry() {
             Made to Carry Your Story
           </h2>
           <p className="text-lg text-[#5A5A55] max-w-[620px] leading-relaxed">
-            Every tote is a canvas for your most cherished moments. We obsess
+            Every tote is a blank slate for your most cherished moments. We obsess
             over the details—from the weight of the cotton to the vibrancy of
             the ink—so your memories look as beautiful as they feel.
           </p>

@@ -2,7 +2,7 @@
 
 import { motion, AnimatePresence } from "framer-motion";
 import Link from "next/link";
-import { X, LogOut } from "lucide-react";
+import { X, Package } from "lucide-react";
 import { useEffect, useState } from "react";
 import { usePathname } from "next/navigation";
 import Image from "next/image";
@@ -110,24 +110,22 @@ export function MobileMenu({ isOpen, onClose }: MobileMenuProps) {
             <div className="pb-8 flex flex-col space-y-6">
                <div className="h-px w-full bg-border" />
                {profile ? (
-                 <div className="flex items-center gap-3">
-                   <Link href="/account" className="flex items-center gap-2 font-sans text-sm font-medium text-secondary-foreground hover:text-foreground transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" onClick={onClose}>
+                 <div className="flex flex-col gap-4">
+                   <Link href="/account" className="flex items-center gap-2.5 bg-[#252A1A] text-white px-4 py-3 rounded-[12px] font-sans text-[14px] font-medium hover:bg-[#3A3E2F] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" onClick={onClose}>
                      {profile.picture ? (
-                       <div className="w-5 h-5 rounded-full overflow-hidden bg-[#F5F3EC]">
-                         <Image src={profile.picture} alt="Account" width={20} height={20} className="w-full h-full object-cover" unoptimized />
+                       <div className="w-6 h-6 rounded-full overflow-hidden bg-white/20">
+                         <Image src={profile.picture} alt="Account" width={24} height={24} className="w-full h-full object-cover" unoptimized />
                        </div>
                      ) : (
-                       <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+                       <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
                      )}
-                     Account
+                     My Account
                    </Link>
-                   <button
-                     onClick={() => setShowLogoutConfirm(true)}
-                     className="flex items-center gap-1.5 font-sans text-sm font-medium text-[#b06161] hover:text-[#252A1A] transition-colors"
-                   >
-                     <LogOut className="w-3.5 h-3.5" strokeWidth={1.5} />
-                     Sign out
-                   </button>
+                   
+                   <Link href="/account" className="flex items-center gap-2.5 px-1 font-sans text-[15px] font-medium text-foreground hover:opacity-70 transition-opacity focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" onClick={onClose}>
+                     <Package className="w-5 h-5 text-primary" strokeWidth={1.5} />
+                     My Orders
+                   </Link>
                  </div>
                ) : (
                  <Link href="/account" className="font-sans text-sm font-medium text-secondary-foreground hover:text-foreground transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" onClick={onClose}>

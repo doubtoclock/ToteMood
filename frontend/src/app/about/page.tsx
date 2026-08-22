@@ -2,7 +2,8 @@ import Image from "next/image";
 import Link from "next/link";
 import { Container } from "@/components/layout/Container";
 import { Section } from "@/components/layout/Section";
-import { HowItStartedScroll } from "@/components/about/HowItStartedScroll";
+
+import { WhyTotemoodExistsScroll } from "@/components/about/WhyTotemoodExistsScroll";
 
 export const metadata = {
   title: "About Us | Totemood",
@@ -11,26 +12,21 @@ export const metadata = {
 
 export default function AboutPage() {
   return (
-    <main className="min-h-screen bg-[#FAF9F8] pt-[110px] pb-24">
-      {/* 1. Hero Section: The Founder Story */}
-      <Section className="relative pt-0 md:pt-0">
+    <main className="min-h-screen bg-[#FAF9F8] pt-[110px]">
+
+      {/* 1. Header & Story Progression: Scroll Effect */}
+      <WhyTotemoodExistsScroll />
+
+      {/* 2. My Vision & Image */}
+      <Section className="relative py-24 bg-[#FAF9F8]">
         {/* Subtle tonal variation behind image */}
         <div className="absolute top-10 right-[5%] w-[45vw] h-[70vh] bg-[#F5F3EC] rounded-[40px] -z-10 blur-3xl opacity-80"></div>
         
         <Container>
           <div className="flex flex-col lg:flex-row items-center lg:items-start justify-between gap-16 lg:gap-20">
-            {/* Left Column: Content (45%) */}
+            {/* Left Column: My Vision Text */}
             <div className="w-full lg:w-[45%] flex flex-col pt-8 lg:pt-16">
-              <div className="mb-12">
-                <p className="text-[14px] md:text-[16px] text-[#C25858] font-bold uppercase tracking-[0.2em] mb-4">
-                  BUILDING TOTEMOOD
-                </p>
-                <h1 className="text-[52px] md:text-[72px] font-title text-[#252A1A] leading-[1.1] tracking-tight">
-                  Siya Maurya
-                </h1>
-              </div>
-
-              <h2 className="text-[24px] md:text-[28px] font-title text-[#252A1A] mb-6">
+              <h2 className="text-[36px] md:text-[48px] font-title text-[#252A1A] mb-6">
                 My Vision
               </h2>
               
@@ -49,7 +45,7 @@ export default function AboutPage() {
               </div>
             </div>
 
-            {/* Right Column: Photo (45%) */}
+            {/* Right Column: Photo */}
             <div className="w-full lg:w-[45%] flex flex-col">
               <div className="relative w-full aspect-[4/5] rounded-[24px] overflow-hidden border border-[#E8E5DC] shadow-[0_8px_30px_rgb(0,0,0,0.04)] bg-[#EAECE3]">
                 <Image 
@@ -69,8 +65,8 @@ export default function AboutPage() {
         </Container>
       </Section>
 
-      {/* 2. Story Progression: Why Totemood Exists */}
-      <Section className="py-24 md:py-32 bg-white border-y border-[#E8E5DC]">
+      {/* 3. Why Totemood Exists Text */}
+      <Section className="py-24 md:py-32 bg-white">
         <Container>
           <div className="max-w-[800px] mx-auto text-center flex flex-col items-center">
             <h2 className="text-[32px] md:text-[42px] font-title text-[#252A1A] mb-8">
@@ -81,17 +77,14 @@ export default function AboutPage() {
                 We noticed that giving gifts had become a transaction—something bought quickly and forgotten easily. But the most meaningful relationships deserve more than generic items off a shelf.
               </p>
               <p>
-                Totemood exists to turn fleeting memories and deep emotions into tangible keepsakes. We believe that when you give something deeply personal, you aren't just giving an object; you are giving a feeling, a memory, a piece of your shared history.
+                Totemood exists to turn fleeting memories and deep emotions into tangible keepsakes. We believe that when you give something deeply personal, you aren&apos;t just giving an object; you are giving a feeling, a memory, a piece of your shared history.
               </p>
             </div>
           </div>
         </Container>
       </Section>
 
-      {/* 3. Visual Rhythm: How It Started */}
-      <HowItStartedScroll />
-
-      {/* 4. Emotional Finish & CTA */}
+      {/* 3. Emotional Finish & CTA */}
       <Section className="py-32 md:py-40 bg-[#F5F3EC] border-y border-[#E8E5DC]">
         <Container>
           <div className="flex flex-col items-center text-center max-w-[700px] mx-auto">

@@ -99,9 +99,8 @@ function writeCache(products: Product[]) {
 }
 
 export function useProducts() {
-  const [initialProducts] = useState(() => readCache());
-  const [products, setProducts] = useState<Product[]>(initialProducts ?? []);
-  const [loading, setLoading] = useState(!initialProducts);
+  const [products, setProducts] = useState<Product[]>([]);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
   const fetchProducts = useCallback(async () => {
@@ -123,6 +122,11 @@ export function useProducts() {
   }, []);
 
   useEffect(() => {
+    const cached = readCache();
+    if (cached) {
+      setProducts(cached);
+      setLoading(false);
+    }
     void Promise.resolve().then(fetchProducts);
     if (!ENABLE_REALTIME) return;
 
