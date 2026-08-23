@@ -505,7 +505,7 @@ export default function AdminProducts() {
                     >
                       {gallery.map((galleryImage, index) => (
                         <div key={`${galleryImage}-${index}`} className="relative aspect-square overflow-hidden rounded-lg border border-[#1C1C1A]/10 bg-[#F8F6EF]">
-                          <Image src={galleryImage} alt={`Gallery image ${index + 1}`} fill className="object-cover" />
+                          <Image src={galleryImage} alt={`Gallery image ${index + 1}`} fill className="object-contain p-1" />
                           <div className="absolute inset-x-1 bottom-1 flex justify-between gap-1">
                             <button
                               type="button"

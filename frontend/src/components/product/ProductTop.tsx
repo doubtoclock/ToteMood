@@ -4,7 +4,7 @@ import Image from "next/image";
 import { useState, useMemo } from "react";
 import { Star, Truck, CheckCircle2, Lock } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { Product, products as staticProducts } from "@/lib/data/products";
+import { Product } from "@/lib/data/products";
 import { useCartStore } from "@/lib/store/useCartStore";
 
 const WHATSAPP_URL = "https://wa.me/919890842755?text=Hi%20Totemood!%20I%27d%20like%20a%20free%20sample%20preview%20please.";
@@ -25,73 +25,17 @@ export function ProductTop({ product }: { product: Product }) {
   const oldPrice = product.oldPrice ?? product.originalPrice;
 
   const thumbnails = useMemo(() => {
-    if (product.gallery && product.gallery.length > 1) {
+    if (product.gallery && product.gallery.length > 0) {
       return product.gallery;
     }
-    const match = staticProducts.find(
-      (p) => p.id === product.id || p.name.toLowerCase() === product.name?.toLowerCase()
-    );
-    if (match?.gallery && match.gallery.length > 0) {
-      return match.gallery;
-    }
-    const image = product.image || "";
-    const matchW = image.match(/W(\d+)\.png/i);
-    if (matchW) {
-      const num = parseInt(matchW[1], 10);
-      const baseGroup = Math.floor((num - 1) / 4) * 4 + 1;
-      return [
-        `/images/product/W${baseGroup}.png`,
-        `/images/product/W${baseGroup + 1}.png`,
-        `/images/product/W${baseGroup + 2}.png`,
-        `/images/product/W${baseGroup + 3}.png`,
-      ];
-    }
-    return [product.image];
-  }, [product]);
+    return product.image ? [product.image] : [];
+  }, [product.gallery, product.image]);
 
   const [selectedImage, setSelectedImage] = useState<{ productId: string; image: string } | null>(null);
   const activeImage = selectedImage?.productId === product.id && thumbnails.includes(selectedImage.image)
     ? selectedImage.image
     : thumbnails[0] || product.image;
-
-  // Zoom logic
-  const [isZooming, setIsZooming] = useState(false);
-  const [zoomStyle, setZoomStyle] = useState<React.CSSProperties>({});
-
-  const handlePointerMove = (e: React.MouseEvent<HTMLDivElement> | React.TouchEvent<HTMLDivElement>) => {
-    let clientX, clientY;
-    if ('touches' in e) {
-      clientX = e.touches[0].clientX;
-      clientY = e.touches[0].clientY;
-    } else {
-      clientX = e.clientX;
-      clientY = e.clientY;
-    }
-    
-    const { left, top, width, height } = e.currentTarget.getBoundingClientRect();
-    const x = ((clientX - left) / width) * 100;
-    const y = ((clientY - top) / height) * 100;
-    
-    const clampedX = Math.max(0, Math.min(100, x));
-    const clampedY = Math.max(0, Math.min(100, y));
-
-    setZoomStyle({
-      transformOrigin: `${clampedX}% ${clampedY}%`,
-      transform: 'scale(1.8)'
-    });
-  };
-
-  const handlePointerLeave = () => {
-    setIsZooming(false);
-    setZoomStyle({
-      transformOrigin: 'center center',
-      transform: 'scale(1)'
-    });
-  };
-  
-  const handlePointerEnter = () => {
-    setIsZooming(true);
-  };
+  const isSizeChart = activeImage.includes("/images/size.");
 
   return (
     <section className="pt-0 pb-8 md:pb-12">
@@ -126,23 +70,21 @@ export function ProductTop({ product }: { product: Product }) {
           {/* Left Column: Image Gallery */}
           <div className="flex flex-col gap-4 lg:sticky lg:top-28 w-full">
             {/* Main Image */}
-            <div className="relative aspect-[4/5] lg:aspect-square w-full overflow-hidden rounded-[24px] bg-[#F5F3EC] flex items-center justify-center p-0 md:p-6 border border-[#E8E5DC]">
-              <div 
-                className="relative w-full h-full cursor-zoom-in transition-transform duration-100 ease-out will-change-transform"
-                style={zoomStyle}
-                onMouseMove={handlePointerMove}
-                onMouseEnter={handlePointerEnter}
-                onMouseLeave={handlePointerLeave}
-                onTouchMove={handlePointerMove}
-                onTouchStart={handlePointerEnter}
-                onTouchEnd={handlePointerLeave}
-                onTouchCancel={handlePointerLeave}
-              >
+            <div
+              className={`relative w-full overflow-hidden rounded-[24px] bg-[#F5F3EC] flex items-center justify-center border border-[#E8E5DC] select-none touch-manipulation [-webkit-touch-callout:none] ${
+                isSizeChart
+                  ? "aspect-[1060/1484] lg:aspect-square p-4 sm:p-5 md:p-6"
+                  : "aspect-[4/5] lg:aspect-square p-3 sm:p-4 md:p-6"
+              }`}
+              onContextMenu={(event) => event.preventDefault()}
+            >
+              <div className="relative w-full h-full">
                 <Image
                   src={activeImage}
                   alt={product.name}
                   fill
-                  className="object-cover md:object-contain rounded-[20px] md:rounded-none pointer-events-none"
+                  draggable={false}
+                  className="object-contain rounded-[18px] md:rounded-none select-none pointer-events-none"
                   priority
                   sizes="(max-width: 1024px) 100vw, 50vw"
                 />
@@ -163,8 +105,9 @@ export function ProductTop({ product }: { product: Product }) {
                     src={thumb}
                     alt={`Thumbnail ${index + 1}`}
                     fill
+                    draggable={false}
                     loading={index === 0 ? "eager" : "lazy"}
-                    className="object-cover"
+                    className="object-contain p-1 select-none pointer-events-none"
                   />
                 </button>
               ))}

@@ -109,7 +109,7 @@ const FALLBACK_PRODUCTS = [
     price: 499,
     oldPrice: 599,
     image: '/images/product/W1.png',
-    gallery: ['/images/product/W1.png', '/images/product/W2.png', '/images/product/W3.png', '/images/product/W4.png', '/images/size.jpeg'],
+    gallery: ['/images/product/W1.png', '/images/product/W2.png', '/images/product/W3.png', '/images/product/W4.png', '/images/size.png'],
     isCustomizable: true,
     label: 'bestseller',
     category: 'image',
@@ -122,7 +122,7 @@ const FALLBACK_PRODUCTS = [
     price: 599,
     oldPrice: 749,
     image: '/images/product/W5.png',
-    gallery: ['/images/product/W5.png', '/images/product/W6.png', '/images/product/W7.png', '/images/product/W8.png', '/images/size.jpeg'],
+    gallery: ['/images/product/W5.png', '/images/product/W6.png', '/images/product/W7.png', '/images/product/W8.png', '/images/size.png'],
     isCustomizable: true,
     label: 'bestseller',
     category: 'image+text',
@@ -135,7 +135,7 @@ const FALLBACK_PRODUCTS = [
     price: 599,
     oldPrice: 719,
     image: '/images/product/W9.png',
-    gallery: ['/images/product/W9.png', '/images/product/W10.png', '/images/product/W11.png', '/images/product/W12.png', '/images/size.jpeg'],
+    gallery: ['/images/product/W9.png', '/images/product/W10.png', '/images/product/W11.png', '/images/product/W12.png', '/images/size.png'],
     isCustomizable: true,
     label: 'bestseller',
     category: 'image+text',
@@ -148,7 +148,7 @@ const FALLBACK_PRODUCTS = [
     price: 499,
     oldPrice: 599,
     image: '/images/product/W13.png',
-    gallery: ['/images/product/W13.png', '/images/product/W14.png', '/images/product/W15.png', '/images/product/W16.png', '/images/size.jpeg'],
+    gallery: ['/images/product/W13.png', '/images/product/W14.png', '/images/product/W15.png', '/images/product/W16.png', '/images/size.png'],
     isCustomizable: true,
     label: 'new',
     category: 'image',
@@ -161,7 +161,7 @@ const FALLBACK_PRODUCTS = [
     price: 499,
     oldPrice: 599,
     image: '/images/product/W17.png',
-    gallery: ['/images/product/W17.png', '/images/product/W18.png', '/images/product/W19.png', '/images/product/W20.png', '/images/size.jpeg'],
+    gallery: ['/images/product/W17.png', '/images/product/W18.png', '/images/product/W19.png', '/images/product/W20.png', '/images/size.png'],
     isCustomizable: true,
     label: 'new',
     category: 'image',
@@ -553,11 +553,23 @@ async function ensureCatalogCustomizationColumns() {
   await prisma.$executeRawUnsafe(`ALTER TABLE "Product" ADD COLUMN IF NOT EXISTS "label" TEXT NOT NULL DEFAULT 'new';`);
   await prisma.$executeRawUnsafe(`ALTER TABLE "Product" ADD COLUMN IF NOT EXISTS "gallery" TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[];`);
   await prisma.$executeRawUnsafe(`UPDATE "Product" SET "gallery" = ARRAY["image"] WHERE cardinality("gallery") = 0 AND COALESCE("image", '') <> '';`);
-  await prisma.$executeRawUnsafe(`UPDATE "Product" SET "gallery" = ARRAY['/images/product/W1.png', '/images/product/W2.png', '/images/product/W3.png', '/images/product/W4.png', '/images/size.jpeg'] WHERE "id" = 'ghibli-art-tote' AND cardinality("gallery") <= 1;`);
-  await prisma.$executeRawUnsafe(`UPDATE "Product" SET "gallery" = ARRAY['/images/product/W5.png', '/images/product/W6.png', '/images/product/W7.png', '/images/product/W8.png', '/images/size.jpeg'] WHERE "id" = 'ghibli-text-tote' AND cardinality("gallery") <= 1;`);
-  await prisma.$executeRawUnsafe(`UPDATE "Product" SET "gallery" = ARRAY['/images/product/W9.png', '/images/product/W10.png', '/images/product/W11.png', '/images/product/W12.png', '/images/size.jpeg'] WHERE "id" = 'emoji-ghibli-tote' AND cardinality("gallery") <= 1;`);
-  await prisma.$executeRawUnsafe(`UPDATE "Product" SET "gallery" = ARRAY['/images/product/W13.png', '/images/product/W14.png', '/images/product/W15.png', '/images/product/W16.png', '/images/size.jpeg'] WHERE "id" = 'polaroid-tote' AND cardinality("gallery") <= 1;`);
-  await prisma.$executeRawUnsafe(`UPDATE "Product" SET "gallery" = ARRAY['/images/product/W17.png', '/images/product/W18.png', '/images/product/W19.png', '/images/product/W20.png', '/images/size.jpeg'] WHERE "id" = 'any-design-tote' AND cardinality("gallery") <= 1;`);
+  await prisma.$executeRawUnsafe(`UPDATE "Product" SET "gallery" = ARRAY['/images/product/W1.png', '/images/product/W2.png', '/images/product/W3.png', '/images/product/W4.png', '/images/size.png'] WHERE "id" = 'ghibli-art-tote' AND cardinality("gallery") <= 1;`);
+  await prisma.$executeRawUnsafe(`UPDATE "Product" SET "gallery" = ARRAY['/images/product/W5.png', '/images/product/W6.png', '/images/product/W7.png', '/images/product/W8.png', '/images/size.png'] WHERE "id" = 'ghibli-text-tote' AND cardinality("gallery") <= 1;`);
+  await prisma.$executeRawUnsafe(`UPDATE "Product" SET "gallery" = ARRAY['/images/product/W9.png', '/images/product/W10.png', '/images/product/W11.png', '/images/product/W12.png', '/images/size.png'] WHERE "id" = 'emoji-ghibli-tote' AND cardinality("gallery") <= 1;`);
+  await prisma.$executeRawUnsafe(`UPDATE "Product" SET "gallery" = ARRAY['/images/product/W13.png', '/images/product/W14.png', '/images/product/W15.png', '/images/product/W16.png', '/images/size.png'] WHERE "id" = 'polaroid-tote' AND cardinality("gallery") <= 1;`);
+  await prisma.$executeRawUnsafe(`UPDATE "Product" SET "gallery" = ARRAY['/images/product/W17.png', '/images/product/W18.png', '/images/product/W19.png', '/images/product/W20.png', '/images/size.png'] WHERE "id" = 'any-design-tote' AND cardinality("gallery") <= 1;`);
+  await prisma.$executeRawUnsafe(`
+    UPDATE "Product"
+    SET "gallery" = array_replace("gallery", '/images/size.jpeg', '/images/size.png')
+    WHERE "id" IN ('ghibli-art-tote', 'ghibli-text-tote', 'emoji-ghibli-tote', 'polaroid-tote', 'any-design-tote')
+      AND '/images/size.jpeg' = ANY("gallery");
+  `);
+  await prisma.$executeRawUnsafe(`
+    UPDATE "Product"
+    SET "gallery" = array_append("gallery", '/images/size.png')
+    WHERE "id" IN ('ghibli-art-tote', 'ghibli-text-tote', 'emoji-ghibli-tote', 'polaroid-tote', 'any-design-tote')
+      AND NOT '/images/size.png' = ANY("gallery");
+  `);
   await prisma.$executeRawUnsafe(`
     UPDATE "Product"
     SET "label" = lower("category")
