@@ -83,7 +83,10 @@ function getPrismaDatabaseUrl(): string {
       url.searchParams.set('pgbouncer', 'true');
     }
     if (usesPooler && !url.searchParams.has('connection_limit')) {
-      url.searchParams.set('connection_limit', '1');
+      url.searchParams.set('connection_limit', '10');
+    }
+    if (usesPooler && !url.searchParams.has('pool_timeout')) {
+      url.searchParams.set('pool_timeout', '30');
     }
     return url.toString();
   } catch {
@@ -193,6 +196,33 @@ function sanitizeProductForResponse<T extends { image: string; gallery?: string[
 
 function sanitizeProductsForResponse<T extends { image: string; gallery?: string[] }>(products: T[]): T[] {
   return products.map(sanitizeProductForResponse);
+}
+
+const MAX_DISPLAY_ID = 999999;
+
+async function getNextOrderId(): Promise<string> {
+  const last = await prisma.order.findFirst({
+    where: { displayId: { not: '' } },
+    orderBy: { displayId: 'desc' },
+    select: { displayId: true },
+  });
+
+  let next = 1;
+  if (last?.displayId) {
+    const num = parseInt(last.displayId, 10);
+    if (!isNaN(num)) {
+      next = num >= MAX_DISPLAY_ID ? 1 : num + 1;
+    }
+  }
+
+  const candidate = String(next).padStart(6, '0');
+  const exists = await prisma.order.findFirst({ where: { displayId: candidate }, select: { id: true } });
+  if (exists) {
+    // Rare collision: try the next one
+    const fallback = next >= MAX_DISPLAY_ID ? 1 : next + 1;
+    return String(fallback).padStart(6, '0');
+  }
+  return candidate;
 }
 
 function normalizeOrderStatus(status: unknown): OrderStatusValue | null {
@@ -711,8 +741,11 @@ async function createOrderFromCheckout(checkout: PendingCheckout, razorpayPaymen
       }
     }
 
+    const displayId = await getNextOrderId();
+
     return tx.order.create({
       data: {
+        displayId,
         gokwikOrderId: razorpayPaymentId || null,
         customerEmail: checkout.customerEmail,
         customerPhone: checkout.customerPhone,
@@ -1239,8 +1272,10 @@ app.post('/gokwik/v1/cart/place-order', gokwikAuthMiddleware, async (req, res) =
     }));
 
     // Create order in Prisma
+    const displayId = await getNextOrderId();
     const newOrder = await prisma.order.create({
       data: {
+        displayId,
         gokwikOrderId: req.body.gokwik_order_id || `gk_${Date.now()}`,
         customerFirstName: billing.first_name || session.customer.first_name || 'Customer',
         customerLastName: billing.last_name || session.customer.last_name || '',
@@ -1591,16 +1626,42 @@ app.post('/api/orders', async (req, res) => {
 
 app.put('/api/orders/:id', async (req, res) => {
   try {
-    const status = normalizeOrderStatus(req.body.status);
-    if (!status) {
-      return res.status(400).json({
-        error: 'Invalid order status.',
-        allowedStatuses: ORDER_STATUSES,
-      });
+    const { status, displayId } = req.body;
+    const updateData: Record<string, unknown> = {};
+
+    if (status !== undefined) {
+      const normalizedStatus = normalizeOrderStatus(status);
+      if (!normalizedStatus) {
+        return res.status(400).json({
+          error: 'Invalid order status.',
+          allowedStatuses: ORDER_STATUSES,
+        });
+      }
+      updateData.status = normalizedStatus;
     }
+
+    if (displayId !== undefined) {
+      const trimmed = String(displayId).trim();
+      if (!/^\d{6}$/.test(trimmed)) {
+        return res.status(400).json({ error: 'Display ID must be exactly 6 digits.' });
+      }
+      const existing = await prisma.order.findFirst({
+        where: { displayId: trimmed, NOT: { id: req.params.id } },
+        select: { id: true },
+      });
+      if (existing) {
+        return res.status(409).json({ error: `Display ID ${trimmed} is already in use.` });
+      }
+      updateData.displayId = trimmed;
+    }
+
+    if (Object.keys(updateData).length === 0) {
+      return res.status(400).json({ error: 'No valid fields to update.' });
+    }
+
     const order = await prisma.order.update({
       where: { id: req.params.id },
-      data: { status },
+      data: updateData,
       include: {
         items: {
           include: { product: true }

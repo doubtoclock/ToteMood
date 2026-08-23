@@ -363,7 +363,7 @@ export default function CheckoutPage() {
                 verifyRazorpayPayment(response),
                 wait(CONFIRMING_ORDER_MIN_MS),
               ]);
-              setConfirmedOrderId(result.order.id);
+              setConfirmedOrderId(result.order.displayId);
               setIsSuccess(true);
               setIsConfirmingOrder(false);
               clearCart();
@@ -450,7 +450,7 @@ export default function CheckoutPage() {
           </p>
           {confirmedOrderId && (
             <p className="text-[12px] font-bold uppercase tracking-widest text-[#8C867C] mb-6">
-              Order #{confirmedOrderId.slice(-6).toUpperCase()}
+              Order #{confirmedOrderId}
             </p>
           )}
           <Link href="/shop" className="inline-flex items-center justify-center bg-[#252A1A] text-white h-[54px] px-10 rounded-[14px] font-bold uppercase tracking-[0.1em] text-[13px] hover:bg-[#3A3E2F] transition-colors shadow-sm">

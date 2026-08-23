@@ -26,6 +26,7 @@ model Product {
 
 model Order {
   id                String      @id @default(cuid())
+  displayId         String      @unique
   gokwikOrderId     String?
   customerEmail     String
   customerPhone     String

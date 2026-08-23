@@ -1,14 +1,60 @@
+"use client";
+
+import { useState } from "react";
 import { Container } from "@/components/layout/Container";
 import { Section } from "@/components/layout/Section";
 import { AmbientGlow } from "@/components/ui/AmbientGlow";
-import { Mail, Phone, MapPin, MessageCircle } from "lucide-react";
+import { Mail, Phone, MapPin, MessageCircle, Loader2 } from "lucide-react";
 
-export const metadata = {
-  title: "Contact Us | Totemood",
-  description: "Get in touch with Totemood for personalized gifting inquiries, support, and more.",
-};
+const WHATSAPP_PHONE = "919890842755";
+const SUBJECT_MAX = 60;
+const MESSAGE_MAX = 500;
+
+const SUBJECTS = [
+  "Order Inquiry",
+  "Customisation",
+  "Shipping",
+  "Product Question",
+  "Collaboration",
+  "Other",
+] as const;
+
+function buildWhatsAppUrl(firstName: string, lastName: string, subject: string, message: string) {
+  const name = [firstName, lastName].filter(Boolean).join(" ") || "Customer";
+  const text = `Hi Totemood! I'm ${name}.\n\nSubject: ${subject || "General Inquiry"}\n\n${message || "I'd like to get in touch."}`.trim();
+  return `https://wa.me/${WHATSAPP_PHONE}?text=${encodeURIComponent(text)}`;
+}
 
 export default function ContactPage() {
+  const [firstName, setFirstName] = useState("");
+  const [lastName, setLastName] = useState("");
+  const [subject, setSubject] = useState("");
+  const [message, setMessage] = useState("");
+  const [whatsappUrl, setWhatsappUrl] = useState("");
+  const [isGenerating, setIsGenerating] = useState(false);
+  const [linkReady, setLinkReady] = useState(false);
+
+  const handleGenerateLink = async () => {
+    setIsGenerating(true);
+    setLinkReady(false);
+
+    // Simulate brief generation time for UX
+    await new Promise((r) => setTimeout(r, 800));
+
+    const url = buildWhatsAppUrl(firstName, lastName, subject, message);
+    setWhatsappUrl(url);
+    setIsGenerating(false);
+    setLinkReady(true);
+  };
+
+  const handleOpenWhatsApp = () => {
+    if (whatsappUrl) {
+      window.open(whatsappUrl, "_blank", "noopener,noreferrer");
+    }
+  };
+
+  const hasContent = firstName.trim().length > 0 || message.trim().length > 0;
+
   return (
     <main className="min-h-screen bg-[#FAF9F8] pt-[90px] pb-16">
       <Section className="relative overflow-hidden pt-0 md:pt-0">
@@ -28,7 +74,7 @@ export default function ContactPage() {
             <div className="flex flex-col">
               <div className="mb-6">
                 <p className="text-[14px] md:text-[16px] text-[#b06161] font-bold uppercase tracking-[0.2em] mb-2">
-                  WE'D LOVE TO HEAR FROM YOU
+                  WE&apos;D LOVE TO HEAR FROM YOU
                 </p>
                 <h1 className="text-[52px] md:text-[64px] font-title text-[#252A1A] leading-[1] tracking-tight">
                   Get in Touch
@@ -37,7 +83,7 @@ export default function ContactPage() {
               
               <div className="text-[18px] text-[#5A5A55] leading-[1.6] max-w-[500px] mb-8">
                 <p>
-                  Whether you have a question about our personalised bags, need help with an order, or just want to share some love, we're here for you.
+                  Whether you have a question about our personalised bags, need help with an order, or just want to share some love, we&apos;re here for you.
                 </p>
               </div>
 
@@ -49,7 +95,7 @@ export default function ContactPage() {
                   <div>
                     <h3 className="font-title text-[18px] text-[#252A1A] mb-0.5">WhatsApp</h3>
                     <p className="text-[14px] text-[#686B59]">Fastest way to reach us for order approvals and queries.</p>
-                    <a href="https://wa.me/919890842755" className="text-[15px] text-[#b06161] font-bold hover:text-[#252A1A] transition-colors mt-0.5 inline-block">
+                    <a href={`https://wa.me/${WHATSAPP_PHONE}`} className="text-[15px] text-[#b06161] font-bold hover:text-[#252A1A] transition-colors mt-0.5 inline-block">
                       +91 98908 42755
                     </a>
                   </div>
@@ -62,8 +108,8 @@ export default function ContactPage() {
                   <div>
                     <h3 className="font-title text-[18px] text-[#252A1A] mb-0.5">Email</h3>
                     <p className="text-[14px] text-[#686B59]">For business inquiries and support.</p>
-                    <a href="mailto:totemood21@gmail.com" className="text-[15px] text-[#b06161] font-bold hover:text-[#252A1A] transition-colors mt-0.5 inline-block">
-                      totemood21@gmail.com
+                    <a href="mailto:totemood.gifts@gmail.com" className="text-[15px] text-[#b06161] font-bold hover:text-[#252A1A] transition-colors mt-0.5 inline-block">
+                      totemood.gifts@gmail.com
                     </a>
                   </div>
                 </div>
@@ -95,13 +141,15 @@ export default function ContactPage() {
             <div className="bg-white rounded-[24px] px-6 py-6 md:px-10 md:py-8 border border-[#E8E5DC] lg:mt-3">
               <h2 className="text-[22px] md:text-[24px] font-title text-[#252A1A] mb-6">Send a Message</h2>
               
-              <form className="space-y-5">
+              <form className="space-y-5" onSubmit={(e) => e.preventDefault()}>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
                   <div className="space-y-2">
                     <label htmlFor="firstName" className="block text-[12px] font-bold text-[#686B59] uppercase tracking-wider">First Name</label>
                     <input 
                       type="text" 
                       id="firstName" 
+                      value={firstName}
+                      onChange={(e) => { setFirstName(e.target.value); setLinkReady(false); }}
                       className="w-full bg-[#FAF9F8] border border-[#E8E5DC] rounded-[14px] px-5 py-3 text-[16px] text-[#252A1A] focus:outline-none focus:border-[#8E9476] focus:ring-1 focus:ring-[#8E9476] transition-all placeholder:text-[#a2a596]"
                       placeholder="Jane"
                     />
@@ -111,6 +159,8 @@ export default function ContactPage() {
                     <input 
                       type="text" 
                       id="lastName" 
+                      value={lastName}
+                      onChange={(e) => { setLastName(e.target.value); setLinkReady(false); }}
                       className="w-full bg-[#FAF9F8] border border-[#E8E5DC] rounded-[14px] px-5 py-3 text-[16px] text-[#252A1A] focus:outline-none focus:border-[#8E9476] focus:ring-1 focus:ring-[#8E9476] transition-all placeholder:text-[#a2a596]"
                       placeholder="Doe"
                     />
@@ -118,50 +168,66 @@ export default function ContactPage() {
                 </div>
 
                 <div className="space-y-2">
-                  <label htmlFor="email" className="block text-[12px] font-bold text-[#686B59] uppercase tracking-wider">Email Address</label>
-                  <input 
-                    type="email" 
-                    id="email" 
-                    className="w-full bg-[#FAF9F8] border border-[#E8E5DC] rounded-[14px] px-5 py-3 text-[16px] text-[#252A1A] focus:outline-none focus:border-[#8E9476] focus:ring-1 focus:ring-[#8E9476] transition-all placeholder:text-[#a2a596]"
-                    placeholder="jane@example.com"
-                  />
-                </div>
-
-                <div className="space-y-2">
                   <label htmlFor="subject" className="block text-[12px] font-bold text-[#686B59] uppercase tracking-wider">Subject</label>
                   <select 
                     id="subject"
+                    value={subject}
+                    onChange={(e) => { setSubject(e.target.value); setLinkReady(false); }}
                     className="w-full bg-[#FAF9F8] border border-[#E8E5DC] rounded-[14px] px-5 py-3 text-[16px] text-[#252A1A] focus:outline-none focus:border-[#8E9476] focus:ring-1 focus:ring-[#8E9476] transition-all cursor-pointer"
-                    defaultValue=""
                   >
                     <option value="" disabled className="text-[#a2a596]">Select a topic</option>
-                    <option>Order Inquiry</option>
-                    <option>Customisation</option>
-                    <option>Shipping</option>
-                    <option>Product Question</option>
-                    <option>Collaboration</option>
-                    <option>Other</option>
+                    {SUBJECTS.map((s) => (
+                      <option key={s} value={s}>{s}</option>
+                    ))}
                   </select>
                 </div>
 
                 <div className="space-y-2">
-                  <label htmlFor="message" className="block text-[12px] font-bold text-[#686B59] uppercase tracking-wider">Message</label>
+                  <div className="flex items-center justify-between">
+                    <label htmlFor="message" className="block text-[12px] font-bold text-[#686B59] uppercase tracking-wider">Message</label>
+                    <span className="text-[11px] text-[#a2a596]">{message.length}/{MESSAGE_MAX}</span>
+                  </div>
                   <textarea 
                     id="message" 
+                    value={message}
+                    onChange={(e) => { setMessage(e.target.value.slice(0, MESSAGE_MAX)); setLinkReady(false); }}
                     className="w-full h-[140px] md:h-[150px] bg-[#FAF9F8] border border-[#E8E5DC] rounded-[14px] px-5 py-3 text-[16px] text-[#252A1A] focus:outline-none focus:border-[#8E9476] focus:ring-1 focus:ring-[#8E9476] transition-all resize-none placeholder:text-[#a2a596]"
                     placeholder="How can we help you?"
+                    maxLength={MESSAGE_MAX}
                   ></textarea>
                 </div>
 
-                <div className="pt-2">
-                  <button 
-                    type="button"
-                    className="w-full bg-[#252A1A] text-white text-[14px] font-medium tracking-wide py-3.5 rounded-[14px] hover:bg-[#3A3E2F] transition-all flex items-center justify-center gap-1"
-                  >
-                    Send message &rarr;
-                  </button>
-                  <p className="text-[12px] text-[#8C867C] text-center mt-3 tracking-wide">
-                    We usually reply within 1 business day.
+                <div className="pt-2 space-y-3">
+                  {linkReady ? (
+                    <button 
+                      type="button"
+                      onClick={handleOpenWhatsApp}
+                      className="w-full bg-[#25D366] text-white text-[14px] font-medium tracking-wide py-3.5 rounded-[14px] hover:bg-[#1ebe5d] transition-all flex items-center justify-center gap-2"
+                    >
+                      <MessageCircle className="w-[18px] h-[18px]" />
+                      Open WhatsApp &rarr;
+                    </button>
+                  ) : (
+                    <button 
+                      type="button"
+                      onClick={handleGenerateLink}
+                      disabled={isGenerating || !hasContent}
+                      className="w-full bg-[#252A1A] text-white text-[14px] font-medium tracking-wide py-3.5 rounded-[14px] hover:bg-[#3A3E2F] transition-all flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      {isGenerating ? (
+                        <>
+                          <Loader2 className="w-[18px] h-[18px] animate-spin" />
+                          Being generated&hellip;
+                        </>
+                      ) : (
+                        <>
+                          Generate WhatsApp Link &rarr;
+                        </>
+                      )}
+                    </button>
+                  )}
+                  <p className="text-[12px] text-[#8C867C] text-center tracking-wide">
+                    {linkReady ? "Link ready! Tap above to open WhatsApp." : "Fill in your details, then generate a link to message us on WhatsApp."}
                   </p>
                 </div>
               </form>

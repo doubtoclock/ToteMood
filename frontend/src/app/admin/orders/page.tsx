@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Eye, Download, User, Phone, MapPin, PackageOpen, Trash2, Loader2, FileSpreadsheet } from "lucide-react";
+import { Eye, Download, User, Phone, MapPin, PackageOpen, Trash2, Loader2, FileSpreadsheet, Pencil, Check, X } from "lucide-react";
 import Image from "next/image";
 import { io } from "socket.io-client";
 import { apiFetch, ENABLE_REALTIME, SOCKET_URL } from "@/lib/api";
@@ -20,6 +20,7 @@ interface AdminOrderItem {
 
 interface AdminOrder {
   id: string;
+  displayId: string;
   customerEmail: string;
   customerPhone: string;
   customerFirstName: string;
@@ -80,6 +81,9 @@ export default function AdminOrders() {
   const [selectedOrder, setSelectedOrder] = useState<AdminOrder | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [updatingId, setUpdatingId] = useState<string | null>(null);
+  const [editingDisplayId, setEditingDisplayId] = useState<string | null>(null);
+  const [displayIdInput, setDisplayIdInput] = useState("");
+  const [displayIdError, setDisplayIdError] = useState("");
 
   useEffect(() => {
     // Fetch initial orders
@@ -145,9 +149,29 @@ export default function AdminOrders() {
         method: 'PUT',
         body: JSON.stringify({ status: newStatus })
       });
-      // UI updates automatically via WebSocket
     } catch (err) {
       console.error(err);
+    } finally {
+      setUpdatingId(null);
+    }
+  };
+
+  const handleUpdateDisplayId = async (orderId: string) => {
+    if (!/^\d{6}$/.test(displayIdInput)) {
+      setDisplayIdError("Must be exactly 6 digits.");
+      return;
+    }
+    setUpdatingId(orderId);
+    setDisplayIdError("");
+    try {
+      await apiFetch(`/api/orders/${orderId}`, {
+        method: 'PUT',
+        body: JSON.stringify({ displayId: displayIdInput })
+      });
+      setEditingDisplayId(null);
+    } catch (err: any) {
+      const msg = err?.message || "Failed to update Order ID.";
+      setDisplayIdError(msg);
     } finally {
       setUpdatingId(null);
     }
@@ -156,7 +180,7 @@ export default function AdminOrders() {
   const handleExportCSV = () => {
     const headers = ["Order ID", "Date", "Status", "First Name", "Last Name", "Email", "Phone", "Address", "City", "State", "Zip", "Subtotal", "Shipping", "Total", "Items", "Product Names"];
     const rows = orders.map(order => [
-      order.id,
+      order.displayId,
       new Date(order.createdAt).toISOString(),
       formatOrderStatus(order.status),
       order.customerFirstName,
@@ -223,7 +247,7 @@ export default function AdminOrders() {
             {orders.map((order) => (
               <tr key={order.id} className={`border-b border-[#1C1C1A]/5 hover:bg-[#F8F6EF]/20 transition-colors ${deletingId === order.id ? 'opacity-50' : ''}`}>
                 <td className="p-4 text-sm font-medium text-[#1C1C1A]">
-                  #{order.id.slice(-6).toUpperCase()}
+                  #{order.displayId}
                 </td>
                 <td className="p-4">
                   <div className="text-sm font-bold text-[#1C1C1A]">{order.customerFirstName} {order.customerLastName}</div>
@@ -279,7 +303,7 @@ export default function AdminOrders() {
             <div className="flex-1 p-8 border-r border-[#1C1C1A]/10">
               <div className="flex justify-between items-start mb-8">
                 <div>
-                  <h2 className="text-2xl font-serif text-[#1C1C1A]">Order #{selectedOrder.id.slice(-6).toUpperCase()}</h2>
+                  <h2 className="text-2xl font-serif text-[#1C1C1A]">Order #{selectedOrder.displayId}</h2>
                   <p className="text-sm text-[#5A5A55]">{new Date(selectedOrder.createdAt).toLocaleString()}</p>
                 </div>
                 <button 
@@ -415,6 +439,50 @@ export default function AdminOrders() {
                     <option key={status} value={status}>{formatOrderStatus(status)}</option>
                   ))}
                 </select>
+              </div>
+
+              <div className="mt-6 pt-6 border-t border-[#1C1C1A]/10">
+                <label className="text-xs font-bold uppercase tracking-widest text-[#5A5A55] block mb-2">Order ID</label>
+                {editingDisplayId === selectedOrder.id ? (
+                  <div className="space-y-2">
+                    <div className="flex gap-2">
+                      <input
+                        type="text"
+                        value={displayIdInput}
+                        onChange={(e) => { setDisplayIdInput(e.target.value.replace(/\D/g, "").slice(0, 6)); setDisplayIdError(""); }}
+                        maxLength={6}
+                        className="flex-1 bg-white border border-[#1C1C1A]/20 rounded-xl px-4 py-2 text-[#1C1C1A] text-sm font-mono focus:outline-none focus:border-[#757D5C]"
+                        placeholder="000000"
+                        autoFocus
+                      />
+                      <button
+                        onClick={() => handleUpdateDisplayId(selectedOrder.id)}
+                        disabled={updatingId === selectedOrder.id}
+                        className="p-2 bg-[#757D5C] text-white rounded-xl hover:bg-[#5C6348] transition-colors disabled:opacity-50"
+                      >
+                        {updatingId === selectedOrder.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
+                      </button>
+                      <button
+                        onClick={() => { setEditingDisplayId(null); setDisplayIdError(""); }}
+                        className="p-2 bg-[#F8F6EF] text-[#5A5A55] rounded-xl hover:bg-[#EAECE3] transition-colors"
+                      >
+                        <X className="w-4 h-4" />
+                      </button>
+                    </div>
+                    {displayIdError && <p className="text-xs text-red-500">{displayIdError}</p>}
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm font-mono font-bold text-[#1C1C1A]">#{selectedOrder.displayId}</span>
+                    <button
+                      onClick={() => { setEditingDisplayId(selectedOrder.id); setDisplayIdInput(selectedOrder.displayId); setDisplayIdError(""); }}
+                      className="p-1.5 text-[#5A5A55] hover:text-[#1C1C1A] hover:bg-[#F8F6EF] rounded-lg transition-colors"
+                      title="Edit Order ID"
+                    >
+                      <Pencil className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                )}
               </div>
             </div>
 
