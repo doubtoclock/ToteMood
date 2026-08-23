@@ -220,7 +220,7 @@ export default function CheckoutPage() {
 
     for (let attempt = 0; attempt <= VERIFY_RETRY_DELAYS_MS.length; attempt += 1) {
       try {
-        return await apiFetch<{ order: { id: string } }>('/api/checkout/verify-razorpay', {
+        return await apiFetch<{ order: { id: string; displayId: string } }>('/api/checkout/verify-razorpay', {
           method: 'POST',
           body: JSON.stringify(response),
         });
