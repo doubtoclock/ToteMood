@@ -37,6 +37,7 @@ interface AccountOrderItem {
 
 interface AccountOrder {
   id: string;
+  displayId?: string;
   customerEmail: string;
   customerPhone: string;
   customerFirstName: string;
@@ -79,6 +80,10 @@ function formatDate(date: string) {
     month: "short",
     year: "numeric",
   }).format(new Date(date));
+}
+
+function formatOrderNumber(order: Pick<AccountOrder, "id" | "displayId">) {
+  return order.displayId || order.id.slice(-6).toUpperCase();
 }
 
 function prettyStatus(status: string) {
@@ -347,7 +352,7 @@ export function AccountContent() {
                   </div>
                   <div>
                     <div className="flex flex-wrap items-center gap-2 mb-1">
-                      <span className="text-[12px] font-medium text-[#252A1A] uppercase tracking-[0.1em]">#{order.id.slice(-6).toUpperCase()}</span>
+                      <span className="text-[12px] font-medium text-[#252A1A] uppercase tracking-[0.1em]">#{formatOrderNumber(order)}</span>
                       <span className="text-[12px] font-medium text-[#686B59] uppercase tracking-[0.1em]">{formatDate(order.createdAt)}</span>
                     </div>
                     <p className="text-[15px] text-[#5A5A55] mb-2">{order.items.length} item{order.items.length === 1 ? "" : "s"} · ₹{order.total.toFixed(2)}</p>
@@ -370,7 +375,7 @@ export function AccountContent() {
       <button onClick={onBack} className="mb-6 text-[12px] tracking-wide text-[#686B59] hover:text-[#252A1A] transition-colors">Back to orders</button>
       <div className="flex flex-col sm:flex-row justify-between gap-3 mb-8">
         <div>
-          <h3 className="text-[20px] font-title text-[#252A1A]">Order #{order.id.slice(-6).toUpperCase()}</h3>
+          <h3 className="text-[20px] font-title text-[#252A1A]">Order #{formatOrderNumber(order)}</h3>
           <p className="text-[12px] uppercase tracking-widest text-[#686B59]">{formatDate(order.createdAt)} · {prettyStatus(order.status)}</p>
         </div>
         <div className="text-right text-[14px] font-bold text-[#252A1A]">₹{order.total.toFixed(2)}</div>

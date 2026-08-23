@@ -5,7 +5,7 @@ import { AmbientGlow } from "@/components/ui/AmbientGlow";
 import Image from "next/image";
 import Link from "next/link";
 import { Upload, CheckCircle2, ArrowLeft, Loader2, Lock, Check, ShieldCheck } from "lucide-react";
-import { useCallback, useEffect, useState, useRef } from "react";
+import { useEffect, useState, useRef } from "react";
 import { apiFetch } from "@/lib/api";
 import { useProducts } from "@/lib/useProducts";
 import { SavedAddress, accountAuthHeaders, getStoredAccountProfile } from "@/lib/account";
