@@ -670,7 +670,7 @@ export default function CheckoutPage() {
               </div>
               <div className="mt-4 flex items-center gap-2 text-[#5A5A55]">
                 <ShieldCheck className="w-4 h-4 text-[#8E9476]" />
-                <span className="text-[13px] font-medium">Secure Razorpay payment in <LogoText /> colors.</span>
+                <span className="text-[13px] font-medium">Secure Razorpay payment in <LogoText />.</span>
               </div>
             </section>
           </div>

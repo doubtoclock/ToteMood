@@ -27,7 +27,7 @@ export function Footer() {
               TOTEMOOD
             </Link>
             <p className="text-[14px] text-white/50 max-w-[280px] leading-relaxed">
-              Personalised tote bags. Every piece tells your story.
+              Every design is made with love and care just for you.
             </p>
           </div>
 

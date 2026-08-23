@@ -74,10 +74,10 @@ export default function AboutPage() {
             </h2>
             <div className="text-[18px] md:text-[22px] text-[#5A5A55] leading-[1.7] space-y-8">
               <p>
-                We noticed that giving gifts had become a transaction—something bought quickly and forgotten easily. But the most meaningful relationships deserve more than generic items off a shelf.
+                 At <LogoText /> Gifts, we believe the best gifts aren’t just things they’re little pieces of memories, emotions, and the people we love. <LogoText /> was created to turn your favorite moments into something you can carry every day. From your best friend to your partner or someone who simply means the world to you, we create custom Ghibli-inspired tote bags that make every gift feel personal, thoughtful, and truly one of a kind.
               </p>
               <p>
-                <LogoText /> exists to turn fleeting memories and deep emotions into tangible keepsakes. We believe that when you give something deeply personal, you aren&apos;t just giving an object; you are giving a feeling, a memory, a piece of your shared history.
+                We’re here because ordinary gifts can be forgotten, but meaningful ones become memories. Every tote we create is made to capture a special person, a special moment, or a feeling that words sometimes can’t express. Because some people deserve more than a gift, they deserve a memory they can carry.
               </p>
             </div>
           </div>

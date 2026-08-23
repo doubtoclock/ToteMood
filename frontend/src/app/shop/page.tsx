@@ -77,9 +77,9 @@ export default function ShopPage() {
 
                 {/* Product Info */}
                 <Link href={`/shop/${product.id}`} className="flex flex-col flex-grow px-1">
-                  <div className="flex items-start justify-between gap-2 sm:gap-4 mb-1 sm:mb-2">
-                    <h3 className="text-[13px] sm:text-[16px] font-bold font-sans text-[#1C1C1A] leading-snug whitespace-nowrap overflow-hidden">
-                      {product.name.length > 28 ? product.name.substring(0, 28) + '...' : product.name}
+                  <div className="flex items-start justify-between gap-2 sm:gap-4 mb-1 sm:mb-2 min-h-[40px] sm:min-h-[48px]">
+                    <h3 className="text-[13px] sm:text-[16px] font-bold font-sans text-[#1C1C1A] leading-snug break-words">
+                      {product.name}
                     </h3>
                   </div>
                   

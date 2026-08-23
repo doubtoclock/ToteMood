@@ -26,11 +26,5 @@ services:
         sync: false
       - key: SESSION_SECRET
         sync: false
-      - key: ORDER_EMAIL_FROM
-        value: totemood21@gmail.com
-      - key: ORDER_EMAIL_USER
-        value: totemood21@gmail.com
-      - key: ORDER_EMAIL_PASS
-        sync: false
       - key: PORT
         value: 4000

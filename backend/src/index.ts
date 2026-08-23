@@ -3,12 +3,10 @@ import type { Request, Response, NextFunction } from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
 import { PrismaClient } from '@prisma/client';
-import type { Order, OrderItem, Product } from '@prisma/client';
 import { createServer } from 'http';
 import { Server } from 'socket.io';
 import crypto from 'crypto';
 import path from 'path';
-import nodemailer from 'nodemailer';
 
 dotenv.config({ quiet: true });
 dotenv.config({ path: path.resolve(__dirname, '../.env'), quiet: true });
@@ -23,11 +21,6 @@ const RAZORPAY_KEY_SECRET = process.env.RAZORPAY_KEY_SECRET || '';
 const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID || process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID || '';
 const SESSION_SECRET = process.env.SESSION_SECRET || RAZORPAY_KEY_SECRET || GOKWIK_APP_SECRET || 'totemood-dev-session-secret';
 const CHECKOUT_DEPOSIT_AMOUNT = 49;
-const ORDER_EMAIL_FROM = process.env.ORDER_EMAIL_FROM || 'totemood21@gmail.com';
-const ORDER_EMAIL_USER = process.env.ORDER_EMAIL_USER || ORDER_EMAIL_FROM;
-const ORDER_EMAIL_PASS = process.env.ORDER_EMAIL_PASS || '';
-const SMTP_HOST = process.env.SMTP_HOST || 'smtp.gmail.com';
-const SMTP_PORT = Number(process.env.SMTP_PORT || 465);
 const defaultAllowedOrigins = [
   'https://totemood.mywire.org',
   'https://www.totemood.mywire.org',
@@ -107,11 +100,6 @@ const prisma = new PrismaClient({
 });
 const ORDER_STATUSES = ['LIVE', 'MANIFESTED', 'SHIPPED', 'DD', 'DELIVER', 'RTO', 'CANCELLED', 'SHIP_LATER'] as const;
 type OrderStatusValue = typeof ORDER_STATUSES[number];
-type OrderWithItems = Order & {
-  items: (OrderItem & {
-    product?: Product | null;
-  })[];
-};
 
 const FALLBACK_PRODUCTS = [
   {
@@ -235,167 +223,6 @@ async function getNextOrderId(): Promise<string> {
     return String(fallback).padStart(6, '0');
   }
   return candidate;
-}
-
-function formatCurrency(amount: number) {
-  return new Intl.NumberFormat('en-IN', {
-    style: 'currency',
-    currency: 'INR',
-    maximumFractionDigits: 2,
-  }).format(amount);
-}
-
-function escapeHtml(value: unknown) {
-  return String(value ?? '')
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#39;');
-}
-
-function getOrderDisplayNumber(order: Pick<Order, 'displayId' | 'id'>) {
-  return order.displayId || order.id.slice(-6).toUpperCase();
-}
-
-let orderEmailTransporter: nodemailer.Transporter | null = null;
-
-function getOrderEmailTransporter() {
-  if (!ORDER_EMAIL_PASS) return null;
-  if (!orderEmailTransporter) {
-    orderEmailTransporter = nodemailer.createTransport({
-      host: SMTP_HOST,
-      port: SMTP_PORT,
-      secure: SMTP_PORT === 465,
-      auth: {
-        user: ORDER_EMAIL_USER,
-        pass: ORDER_EMAIL_PASS,
-      },
-    });
-  }
-  return orderEmailTransporter;
-}
-
-function buildOrderConfirmationEmail(order: OrderWithItems) {
-  const orderNumber = getOrderDisplayNumber(order);
-  const customerName = `${order.customerFirstName} ${order.customerLastName}`.trim() || 'there';
-  const addressLines = [
-    `${order.customerFirstName} ${order.customerLastName}`.trim(),
-    order.customerPhone,
-    order.customerAddress,
-    `${order.customerCity}, ${order.customerState} ${order.customerZip}`.trim(),
-  ].filter(Boolean);
-  const itemRows = order.items.map((item) => {
-    const productName = item.product?.name || 'ToteMood item';
-    const lineTotal = item.priceAtPurchase * item.quantity;
-    const customText = item.customText
-      ? `<div style="color:#686B59;font-size:13px;margin-top:4px;">Custom text: ${escapeHtml(item.customText)}</div>`
-      : '';
-
-    return `
-      <tr>
-        <td style="padding:14px 0;border-bottom:1px solid #E8E5DC;">
-          <div style="font-weight:700;color:#252A1A;">${escapeHtml(productName)}</div>
-          <div style="color:#686B59;font-size:13px;margin-top:4px;">Qty: ${item.quantity}</div>
-          ${customText}
-        </td>
-        <td style="padding:14px 0;border-bottom:1px solid #E8E5DC;text-align:right;color:#252A1A;font-weight:700;">
-          ${formatCurrency(lineTotal)}
-        </td>
-      </tr>
-    `;
-  }).join('');
-
-  const html = `
-    <div style="margin:0;padding:0;background:#FAF9F8;font-family:Arial,Helvetica,sans-serif;color:#252A1A;">
-      <div style="max-width:640px;margin:0 auto;padding:32px 18px;">
-        <div style="text-align:center;margin-bottom:24px;">
-          <div style="font-size:30px;font-weight:900;letter-spacing:.06em;color:#C4756A;">TOTEMOOD</div>
-        </div>
-        <div style="background:#FFFFFF;border:1px solid #E8E5DC;border-radius:18px;padding:28px;">
-          <p style="margin:0 0 8px;color:#8E9476;font-size:13px;font-weight:800;letter-spacing:.12em;text-transform:uppercase;">Order confirmed</p>
-          <h1 style="margin:0 0 14px;font-size:28px;line-height:1.2;color:#252A1A;">Thanks, ${escapeHtml(customerName)}.</h1>
-          <p style="margin:0 0 22px;color:#686B59;line-height:1.6;">Your ToteMood order <strong>#${escapeHtml(orderNumber)}</strong> has been confirmed. We will reach out on WhatsApp with order updates and design proofs before printing.</p>
-
-          <h2 style="font-size:16px;margin:0 0 10px;color:#252A1A;">Order details</h2>
-          <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="border-collapse:collapse;margin-bottom:22px;">
-            ${itemRows}
-          </table>
-
-          <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="border-collapse:collapse;margin-bottom:24px;">
-            <tr>
-              <td style="padding:5px 0;color:#686B59;">Subtotal</td>
-              <td style="padding:5px 0;text-align:right;">${formatCurrency(order.subtotal)}</td>
-            </tr>
-            <tr>
-              <td style="padding:5px 0;color:#686B59;">Shipping</td>
-              <td style="padding:5px 0;text-align:right;">${order.shipping === 0 ? 'Free' : formatCurrency(order.shipping)}</td>
-            </tr>
-            <tr>
-              <td style="padding:12px 0 0;border-top:1px solid #E8E5DC;font-weight:800;">Total</td>
-              <td style="padding:12px 0 0;border-top:1px solid #E8E5DC;text-align:right;font-weight:800;">${formatCurrency(order.total)}</td>
-            </tr>
-          </table>
-
-          <h2 style="font-size:16px;margin:0 0 10px;color:#252A1A;">Shipping details</h2>
-          <div style="background:#FAF9F8;border:1px solid #E8E5DC;border-radius:14px;padding:16px;color:#686B59;line-height:1.6;">
-            ${addressLines.map((line) => `<div>${escapeHtml(line)}</div>`).join('')}
-          </div>
-        </div>
-      </div>
-    </div>
-  `;
-
-  const text = [
-    `Order confirmed: #${orderNumber}`,
-    '',
-    `Thanks, ${customerName}. Your ToteMood order has been confirmed.`,
-    '',
-    'Order details:',
-    ...order.items.map((item) => {
-      const productName = item.product?.name || 'ToteMood item';
-      return `- ${productName} x${item.quantity}: ${formatCurrency(item.priceAtPurchase * item.quantity)}`;
-    }),
-    '',
-    `Subtotal: ${formatCurrency(order.subtotal)}`,
-    `Shipping: ${order.shipping === 0 ? 'Free' : formatCurrency(order.shipping)}`,
-    `Total: ${formatCurrency(order.total)}`,
-    '',
-    'Shipping details:',
-    ...addressLines,
-  ].join('\n');
-
-  return {
-    subject: `ToteMood order confirmed #${orderNumber}`,
-    html,
-    text,
-  };
-}
-
-async function sendOrderConfirmationEmail(order: OrderWithItems) {
-  const transporter = getOrderEmailTransporter();
-  if (!transporter) {
-    console.warn('Order confirmation email skipped: ORDER_EMAIL_PASS is not configured.');
-    return;
-  }
-
-  const email = buildOrderConfirmationEmail(order);
-  await transporter.sendMail({
-    from: `"ToteMood" <${ORDER_EMAIL_FROM}>`,
-    to: order.customerEmail,
-    replyTo: ORDER_EMAIL_FROM,
-    subject: email.subject,
-    text: email.text,
-    html: email.html,
-  });
-}
-
-async function sendOrderConfirmationEmailSafely(order: OrderWithItems) {
-  try {
-    await sendOrderConfirmationEmail(order);
-  } catch (error) {
-    console.error(`Order ${order.id} was created, but confirmation email failed:`, error);
-  }
 }
 
 function normalizeOrderStatus(status: unknown): OrderStatusValue | null {
@@ -962,7 +789,6 @@ async function createOrderFromCheckout(checkout: PendingCheckout, razorpayPaymen
     throw new Error('Order was created but could not be loaded.');
   }
 
-  await sendOrderConfirmationEmailSafely(order);
   io.emit("new_order", order);
   io.emit("products_updated");
   return order;
@@ -1477,8 +1303,6 @@ app.post('/gokwik/v1/cart/place-order', gokwikAuthMiddleware, async (req, res) =
 
     // Clean up session
     cartSessions.delete(sessionKey);
-
-    await sendOrderConfirmationEmailSafely(newOrder);
 
     // Notify admin panel via WebSocket
     io.emit('new_order', newOrder);
