@@ -20,3 +20,11 @@ export async function waitForHydration(page: Page, timeout = 15000): Promise<voi
 export function isMobileViewport(page: import("@playwright/test").Page): boolean {
   return (page.viewportSize()?.width ?? 1280) < 768;
 }
+
+// Backend the deployment-under-test talks to. When testing the production
+// site, seed logins must go to the production backend or tokens won't verify.
+export const TEST_API_BASE =
+  process.env.PLAYWRIGHT_API_URL ||
+  (process.env.PLAYWRIGHT_BASE_URL || "").includes("totemood.com")
+    ? "https://totewood-backend.onrender.com"
+    : "http://localhost:4010";

@@ -1,12 +1,12 @@
 import { test, expect } from "./fixtures";
 import { ADMIN_PATH, ADMIN_ROUTE } from "../src/lib/admin-route";
-import { API_BASE_URL } from "../src/lib/api";
+import { TEST_API_BASE } from "./utils";
 
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || "Siya@2904";
 
 // Logs in against the backend and seeds the admin session before the app boots
 async function seedAdminSession(page: import("@playwright/test").Page) {
-  const res = await page.request.post(`${API_BASE_URL}/api/admin/login`, {
+  const res = await page.request.post(`${TEST_API_BASE}/api/admin/login`, {
     data: { password: ADMIN_PASSWORD },
   });
   if (!res.ok()) throw new Error(`Admin login failed: ${res.status()}`);
