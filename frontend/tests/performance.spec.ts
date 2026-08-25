@@ -1,4 +1,4 @@
-import { test, expect } from "@playwright/test";
+import { test, expect } from "./fixtures";
 
 test.describe("Performance", () => {
   test("PF01 - shop products load via a single API request and cache in sessionStorage", async ({ page }) => {

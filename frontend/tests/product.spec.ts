@@ -1,4 +1,4 @@
-import { test, expect } from "@playwright/test";
+import { test, expect } from "./fixtures";
 
 const PRODUCT = "/shop/ghibli-art-tote";
 
@@ -33,8 +33,8 @@ test.describe("Product Page", () => {
     await page.waitForLoadState("domcontentloaded");
     const img = page.locator("main img").first();
     await expect(img).toBeVisible({ timeout: 10000 });
-    const container = img.locator("xpath=..");
-    await expect(container).toHaveClass(/rounded/, { timeout: 5000 });
+    // The image itself and/or its gallery frame carry the rounding
+    await expect(img).toHaveClass(/rounded/, { timeout: 5000 });
   });
 
   test("P05 - thumbnail gallery allows switching images", async ({ page }) => {

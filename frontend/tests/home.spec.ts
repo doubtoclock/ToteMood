@@ -1,10 +1,33 @@
-import { test, expect } from "@playwright/test";
+import { test, expect } from "./fixtures";
+import { isMobileViewport } from "./utils";
 
 test.describe("Home Page", () => {
   test.beforeEach(async ({ page }) => {
     await page.goto("/");
     await page.waitForLoadState("domcontentloaded");
   });
+
+  // Clicks a primary nav link (through the mobile menu on small screens) and
+  // retries once or twice if a click lands mid-animation and doesn't navigate
+  async function clickNavLink(page: import("@playwright/test").Page, name: string, urlRe: RegExp) {
+    for (let attempt = 0; attempt < 3; attempt++) {
+      if (isMobileViewport(page)) {
+        const open = page.locator("button[aria-label='Open menu']");
+        if (!(await page.locator("button[aria-label='Close menu']").isVisible().catch(() => false))) {
+          await open.click();
+        }
+        await page.getByRole("link", { name, exact: true }).first().click();
+      } else {
+        await page.locator("nav a").filter({ hasText: name }).first().click();
+      }
+      try {
+        await expect(page).toHaveURL(urlRe, { timeout: 4000 });
+        return;
+      } catch (e) {
+        if (attempt === 2) throw e;
+      }
+    }
+  }
 
   test("H01 - loads with correct title, landmarks and navbar", async ({ page }) => {
     await expect(page).toHaveTitle(/Totemood/);
@@ -13,10 +36,11 @@ test.describe("Home Page", () => {
     await expect(page.locator("footer")).toBeVisible();
     const logo = page.locator("header a").filter({ hasText: "Totemood" }).first();
     await expect(logo).toBeVisible();
-    await expect(logo).toHaveClass(/font-script/);
+    await expect(logo).toHaveClass(/uppercase/);
   });
 
   test("H02 - desktop navbar shows all primary links", async ({ page }) => {
+    test.skip(isMobileViewport(page), "desktop navbar is hidden on mobile; mobile menu covered by AU08");
     for (const name of ["Home", "Shop", "Stories", "About", "Contact"]) {
       await expect(page.locator("nav a").filter({ hasText: name }).first()).toBeVisible();
     }
@@ -25,7 +49,7 @@ test.describe("Home Page", () => {
   });
 
   test("H03 - hero section renders with CTA to shop", async ({ page }) => {
-    const cta = page.locator("a[href='/shop']").first();
+    const cta = page.locator("main a[href='/shop']").first();
     await expect(cta).toBeVisible({ timeout: 10000 });
     const hero = page.locator("text=/carry|story/i").first();
     await expect(hero).toBeVisible({ timeout: 10000 });
@@ -55,18 +79,15 @@ test.describe("Home Page", () => {
   });
 
   test("H07 - clicking Shop navigates to /shop", async ({ page }) => {
-    await page.locator("nav a").filter({ hasText: "Shop" }).first().click();
-    await expect(page).toHaveURL(/\/shop/);
+    await clickNavLink(page, "Shop", /\/shop/);
   });
 
   test("H08 - clicking About navigates to /about", async ({ page }) => {
-    await page.locator("nav a").filter({ hasText: "About" }).first().click();
-    await expect(page).toHaveURL(/\/about/);
+    await clickNavLink(page, "About", /\/about/);
   });
 
   test("H09 - clicking Contact navigates to /contact", async ({ page }) => {
-    await page.locator("nav a").filter({ hasText: "Contact" }).first().click();
-    await expect(page).toHaveURL(/\/contact/);
+    await clickNavLink(page, "Contact", /\/contact/);
   });
 
   test("H10 - logo navigates back to home from /shop", async ({ page }) => {

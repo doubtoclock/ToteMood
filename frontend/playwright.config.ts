@@ -1,13 +1,13 @@
 import { defineConfig, devices } from "@playwright/test";
 
-const BASE_URL = "https://www.totemood.mywire.org";
+const BASE_URL = process.env.PLAYWRIGHT_BASE_URL || "https://www.totemood.mywire.org";
 
 export default defineConfig({
   testDir: "./tests",
   fullyParallel: true,
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 2 : 0,
-  workers: process.env.CI ? 1 : undefined,
+  workers: process.env.CI ? 1 : 2,
   reporter: [
     ["list"],
     ["json", { outputFile: "test-results/results.json" }],

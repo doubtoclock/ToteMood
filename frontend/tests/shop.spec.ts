@@ -1,4 +1,4 @@
-import { test, expect } from "@playwright/test";
+import { test, expect } from "./fixtures";
 
 test.describe("Shop Page", () => {
   test.beforeEach(async ({ page }) => {
@@ -72,9 +72,13 @@ test.describe("Shop Page", () => {
 
   test("S09 - adding same item twice increments quantity to 2", async ({ page }) => {
     const card = page.locator("a[href^='/shop/']").first();
+    const closeBtn = page.locator("button[aria-label='Close cart']");
     await card.hover();
     await page.locator("button[aria-label*='Add']").first().click();
-    await page.waitForTimeout(400);
+    // adding opens the cart drawer; close it before adding again
+    await expect(closeBtn).toBeVisible({ timeout: 5000 });
+    await closeBtn.click();
+    await expect(closeBtn).toBeHidden({ timeout: 5000 });
     await card.hover();
     await page.locator("button[aria-label*='Add']").first().click();
     const badge = page.locator("button[aria-label='Cart'] span");

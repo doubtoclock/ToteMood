@@ -1,4 +1,4 @@
-import { test, expect } from "@playwright/test";
+import { test, expect } from "./fixtures";
 
 test.describe("Responsive Layout", () => {
   test("R01 - mobile hides desktop nav, shows hamburger and cart", async ({ page }) => {

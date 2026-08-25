@@ -1,4 +1,4 @@
-import { test, expect } from "@playwright/test";
+import { test, expect } from "./fixtures";
 
 test.describe("Accessibility", () => {
   test("A01 - pages use semantic header, nav, main and footer landmarks", async ({ page }) => {

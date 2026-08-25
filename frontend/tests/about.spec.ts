@@ -1,4 +1,4 @@
-import { test, expect } from "@playwright/test";
+import { test, expect } from "./fixtures";
 
 test.describe("About Page", () => {
   test.beforeEach(async ({ page }) => {
@@ -27,7 +27,8 @@ test.describe("About Page", () => {
   });
 
   test("AB05 - CTA links to shop collection", async ({ page }) => {
-    const cta = page.locator("a[href='/shop']").first();
+    // scope to main so the (hidden-on-mobile) navbar Shop link doesn't match first
+    const cta = page.locator("main a[href='/shop']").first();
     await expect(cta).toBeVisible({ timeout: 10000 });
     await cta.click();
     await expect(page).toHaveURL(/\/shop/, { timeout: 10000 });

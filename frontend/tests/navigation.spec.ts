@@ -1,4 +1,4 @@
-import { test, expect } from "@playwright/test";
+import { test, expect } from "./fixtures";
 
 test.describe("Navigation", () => {
   test.beforeEach(async ({ page }) => {
@@ -6,10 +6,10 @@ test.describe("Navigation", () => {
     await page.waitForLoadState("domcontentloaded");
   });
 
-  test("N01 - logo uses script font and links home", async ({ page }) => {
+  test("N01 - logo uses display font and links home", async ({ page }) => {
     const logo = page.locator("header a").filter({ hasText: "Totemood" }).first();
     await expect(logo).toBeVisible();
-    await expect(logo).toHaveClass(/font-script/);
+    await expect(logo).toHaveClass(/uppercase/);
     await expect(logo).toHaveAttribute("href", "/");
   });
 
@@ -18,15 +18,21 @@ test.describe("Navigation", () => {
     expect(await links.count()).toBe(5);
   });
 
-  test("N03 - navbar is transparent at top and blurred after scroll", async ({ page }) => {
+  test("N03 - navbar is a solid bar at top and a blurred pill after scroll", async ({ page }) => {
+    const header = page.locator("header").first();
     const inner = page.locator("header > div").first();
-    let classes = (await inner.getAttribute("class")) || "";
-    expect(classes).toContain("bg-transparent");
-    await page.evaluate(() => window.scrollTo(0, 300));
     await expect
-      .poll(async () => (await inner.getAttribute("class")) || "", { timeout: 5000 })
+      .poll(async () => (await header.getAttribute("class")) || "", { timeout: 5000 })
+      .toContain("bg-[#F8F6EF]");
+    await page.evaluate(() => {
+      const section = document.getElementById("post-scroll-section");
+      if (section) section.scrollIntoView();
+      else window.scrollTo(0, 2000);
+    });
+    await expect
+      .poll(async () => (await inner.getAttribute("class")) || "", { timeout: 10000 })
       .toContain("backdrop-blur");
-    classes = (await inner.getAttribute("class")) || "";
+    const classes = (await inner.getAttribute("class")) || "";
     expect(classes).toContain("rounded-full");
   });
 

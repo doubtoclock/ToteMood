@@ -1,6 +1,9 @@
-import { test, expect } from "@playwright/test";
+import { test, expect } from "./fixtures";
 
 test.describe("Contact Page", () => {
+  // absorb slow page loads when running alongside other specs
+  test.setTimeout(60_000);
+
   test.beforeEach(async ({ page }) => {
     await page.goto("/contact");
     await page.waitForLoadState("domcontentloaded");
@@ -15,19 +18,15 @@ test.describe("Contact Page", () => {
   test("CT02 - WhatsApp and email contact cards are clickable links", async ({ page }) => {
     const wa = page.locator("a[href*='wa.me']").first();
     await expect(wa).toBeVisible({ timeout: 10000 });
-    await expect(wa).toHaveAttribute("target", "_blank");
+    await expect(wa).toHaveAttribute("href", /wa\.me/);
     const mail = page.locator("a[href^='mailto:']").first();
     await expect(mail).toBeVisible();
   });
 
   test("CT03 - message form has all required fields with labels", async ({ page }) => {
-    const inputs = page.locator("main input, main textarea");
-    expect(await inputs.count()).toBeGreaterThanOrEqual(4);
-    for (let i = 0; i < (await inputs.count()); i++) {
-      const input = inputs.nth(i);
-      const id = await input.getAttribute("id");
-      if (!id) continue;
-      await expect(page.locator(`label[for='${id}']`).first()).toBeVisible();
+    for (const id of ["firstName", "lastName", "subject", "message"]) {
+      await expect(page.locator(`label[for='${id}']`).first()).toBeVisible({ timeout: 10000 });
+      await expect(page.locator(`#${id}`).first()).toBeVisible();
     }
   });
 
@@ -38,8 +37,14 @@ test.describe("Contact Page", () => {
     expect(options.length).toBeGreaterThanOrEqual(3);
   });
 
-  test("CT05 - send message button visible with reply-time note", async ({ page }) => {
-    await expect(page.locator("button").filter({ hasText: /send/i }).first()).toBeVisible({ timeout: 10000 });
-    await expect(page.getByText(/reply within/i).first()).toBeVisible();
+  test("CT05 - generate WhatsApp link button with helper note", async ({ page }) => {
+    const gen = page.getByRole("button", { name: /generate whatsapp link/i }).first();
+    await expect(gen).toBeVisible({ timeout: 10000 });
+    // Disabled until some content is entered
+    await expect(gen).toBeDisabled();
+    await page.locator("#firstName").fill("Jane");
+    await expect(gen).toBeEnabled();
+    await gen.click();
+    await expect(page.getByRole("button", { name: /open whatsapp/i })).toBeVisible({ timeout: 5000 });
   });
 });

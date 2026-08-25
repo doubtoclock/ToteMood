@@ -58,6 +58,9 @@ const noyh = localFont({
 export const metadata: Metadata = {
   title: "Totemood | Premium Illustrated Totes",
   description: "Editorial, warm, and minimal premium tote bags.",
+  icons: {
+    icon: "/images/logo.png",
+  },
 };
 
 export default function RootLayout({

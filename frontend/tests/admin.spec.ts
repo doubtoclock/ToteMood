@@ -1,7 +1,13 @@
-import { test, expect } from "@playwright/test";
+import { test, expect } from "./fixtures";
 
 test.describe("Admin Panel", () => {
+  // Admin views fetch from a remote database; allow extra room under load
+  test.setTimeout(90_000);
+
   test.beforeEach(async ({ page }) => {
+    await page.addInitScript(() => {
+      localStorage.setItem("totemood_admin_auth", "true");
+    });
     await page.goto("/admin");
     await page.waitForLoadState("domcontentloaded");
   });
@@ -10,43 +16,52 @@ test.describe("Admin Panel", () => {
     await expect(page).toHaveURL(/\/admin/);
     await expect(page.locator("header").first()).toHaveCount(0);
     await expect(page.locator("footer")).toHaveCount(0);
+    await expect(page.getByText(/admin login/i)).toHaveCount(0);
   });
 
   test("AD02 - dashboard shows stat cards for revenue, orders and products", async ({ page }) => {
-    await expect(page.getByText(/total revenue/i).first()).toBeVisible({ timeout: 15000 });
+    await expect(page.getByText(/total revenue/i).first()).toBeVisible({ timeout: 30000 });
     await expect(page.getByText(/total orders/i).first()).toBeVisible();
     await expect(page.getByText(/active products/i).first()).toBeVisible();
   });
 
   test("AD03 - admin has Dashboard, Orders and Products tabs", async ({ page }) => {
-    for (const tab of ["Dashboard", "Orders", "Products"]) {
-      await expect(page.locator("button, a").filter({ hasText: new RegExp(`^${tab}$`, "i") }).first()).toBeVisible({ timeout: 10000 });
+    const sidebar = page.locator("aside");
+    for (const tab of ["Dashboard", "Products", "Orders"]) {
+      await expect(sidebar.locator("a").filter({ hasText: new RegExp(`^${tab}$`, "i") }).first()).toBeVisible({ timeout: 20000 });
     }
   });
 
   test("AD04 - switching to Orders tab shows orders view with CSV export", async ({ page }) => {
-    await page.locator("button, a").filter({ hasText: /^orders$/i }).first().click();
-    await expect(page.getByText(/export csv|csv/i).first()).toBeVisible({ timeout: 15000 });
+    await page.locator("aside a").filter({ hasText: /^orders$/i }).first().click();
+    // Orders fetch is large (~20s+ against the live database)
+    await expect(page.getByRole("heading", { name: /orders/i }).first()).toBeVisible({ timeout: 75_000 });
+    // CSV export is available when there is order data
+    await expect(
+      page.getByRole("button", { name: /download csv/i }).or(page.getByText(/no orders found/i))
+    ).toBeVisible({ timeout: 30_000 });
   });
 
   test("AD05 - switching to Products tab shows product management", async ({ page }) => {
-    await page.locator("button, a").filter({ hasText: /^products$/i }).first().click();
-    await expect(
-      page.locator("button, a").filter({ hasText: /add|new|create/i }).first()
-    ).toBeVisible({ timeout: 15000 });
+    await page.locator("aside a").filter({ hasText: /^products$/i }).first().click();
+    await expect(page.getByRole("heading", { name: /products/i }).first()).toBeVisible({ timeout: 30000 });
+    await expect(page.getByRole("button", { name: /add product/i })).toBeVisible({ timeout: 30000 });
   });
 
   test("AD06 - dashboard renders revenue chart area", async ({ page }) => {
-    const chart = page.locator(".recharts-wrapper, .recharts-responsive-container, svg[class*='recharts']").first();
-    await expect(chart).toBeVisible({ timeout: 15000 });
+    await expect(page.getByText(/revenue over time/i)).toBeVisible({ timeout: 30000 });
+    // Chart renders when completed-order data exists, otherwise an empty state is shown
+    await expect(
+      page.locator(".recharts-wrapper, .recharts-responsive-container, svg[class*='recharts']")
+        .or(page.getByText(/no completed orders yet/i))
+        .first()
+    ).toBeVisible({ timeout: 30000 });
   });
 
   test("AD07 - admin tabs are navigable back and forth", async ({ page }) => {
-    const ordersTab = page.locator("button, a").filter({ hasText: /^orders$/i }).first();
-    const dashTab = page.locator("button, a").filter({ hasText: /^dashboard$/i }).first();
-    await ordersTab.click();
-    await expect(page.getByText(/export csv|csv/i).first()).toBeVisible({ timeout: 15000 });
-    await dashTab.click();
-    await expect(page.getByText(/total revenue/i).first()).toBeVisible({ timeout: 15000 });
+    await page.locator("aside a").filter({ hasText: /^orders$/i }).first().click();
+    await expect(page.getByRole("heading", { name: /orders/i }).first()).toBeVisible({ timeout: 75_000 });
+    await page.locator("aside a").filter({ hasText: /^dashboard$/i }).first().click();
+    await expect(page.getByText(/total revenue/i).first()).toBeVisible({ timeout: 30000 });
   });
 });
