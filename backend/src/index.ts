@@ -386,7 +386,7 @@ function requireAuthUser(req: Request, res: Response): AuthUser | null {
 
 // --- Admin auth (scrypt-hashed password + signed admin token) ---
 
-const ADMIN_TOKEN_TTL_MS = 12 * 60 * 60 * 1000;
+const ADMIN_TOKEN_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 
 function verifyAdminPassword(password: unknown): boolean {
   const stored = String(process.env.ADMIN_PASSWORD_HASH || '');

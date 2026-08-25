@@ -5,7 +5,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { LayoutDashboard, Package, ShoppingBag, LogOut, Lock } from "lucide-react";
 import { ADMIN_PATH, ADMIN_ROUTE } from "@/lib/admin-route";
-import { API_BASE_URL } from "@/lib/api";
+import { API_BASE_URL, ADMIN_SESSION_EXPIRED_EVENT } from "@/lib/api";
 
 export default function AdminLayout({
   children,
@@ -26,6 +26,13 @@ export default function AdminLayout({
       localStorage.removeItem("totemood_admin_auth");
       setIsAuthenticated(false);
     }
+    // A rejected/expired token clears the session and lands the user back here
+    const onExpired = () => {
+      setIsAuthenticated(false);
+      setError("Session expired. Please sign in again.");
+    };
+    window.addEventListener(ADMIN_SESSION_EXPIRED_EVENT, onExpired);
+    return () => window.removeEventListener(ADMIN_SESSION_EXPIRED_EVENT, onExpired);
   }, []);
 
   const handleLogin = async (e: React.FormEvent) => {

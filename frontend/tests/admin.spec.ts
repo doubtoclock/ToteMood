@@ -100,4 +100,16 @@ test.describe("Admin Login", () => {
     await page.waitForLoadState("domcontentloaded");
     await expect(page.locator("aside")).toBeVisible({ timeout: 10000 });
   });
+
+  test("AD09 - stale/expired admin token falls back to the login form", async ({ page }) => {
+    await page.addInitScript(() => {
+      localStorage.setItem("totemood_admin_auth", "true");
+      localStorage.setItem("totemood_admin_token", "invalid.expired.token");
+    });
+    await page.goto(ADMIN_PATH);
+    await page.waitForLoadState("domcontentloaded");
+    // the panel must NOT hang on failed data loads — show the login form instead
+    await expect(page.locator("input[type='password']")).toBeVisible({ timeout: 15000 });
+    await expect(page.getByText(/session expired/i)).toBeVisible();
+  });
 });
