@@ -1,19 +1,34 @@
 import { test, expect } from "./fixtures";
+import { ADMIN_PATH, ADMIN_ROUTE } from "../src/lib/admin-route";
+import { API_BASE_URL } from "../src/lib/api";
+
+const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || "Siya@2904";
+
+// Logs in against the backend and seeds the admin session before the app boots
+async function seedAdminSession(page: import("@playwright/test").Page) {
+  const res = await page.request.post(`${API_BASE_URL}/api/admin/login`, {
+    data: { password: ADMIN_PASSWORD },
+  });
+  if (!res.ok()) throw new Error(`Admin login failed: ${res.status()}`);
+  const { token } = (await res.json()) as { token: string };
+  await page.addInitScript((t) => {
+    localStorage.setItem("totemood_admin_auth", "true");
+    localStorage.setItem("totemood_admin_token", t);
+  }, token);
+}
 
 test.describe("Admin Panel", () => {
   // Admin views fetch from a remote database; allow extra room under load
   test.setTimeout(90_000);
 
   test.beforeEach(async ({ page }) => {
-    await page.addInitScript(() => {
-      localStorage.setItem("totemood_admin_auth", "true");
-    });
-    await page.goto("/admin");
+    await seedAdminSession(page);
+    await page.goto(ADMIN_PATH);
     await page.waitForLoadState("domcontentloaded");
   });
 
   test("AD01 - admin page loads without site navbar or footer", async ({ page }) => {
-    await expect(page).toHaveURL(/\/admin/);
+    await expect(page).toHaveURL(new RegExp(`\\/${ADMIN_ROUTE}`));
     await expect(page.locator("header").first()).toHaveCount(0);
     await expect(page.locator("footer")).toHaveCount(0);
     await expect(page.getByText(/admin login/i)).toHaveCount(0);
@@ -63,5 +78,26 @@ test.describe("Admin Panel", () => {
     await expect(page.getByRole("heading", { name: /orders/i }).first()).toBeVisible({ timeout: 75_000 });
     await page.locator("aside a").filter({ hasText: /^dashboard$/i }).first().click();
     await expect(page.getByText(/total revenue/i).first()).toBeVisible({ timeout: 30000 });
+  });
+});
+
+test.describe("Admin Login", () => {
+  test("AD08 - wrong password is rejected, correct password grants access", async ({ page }) => {
+    await page.goto(ADMIN_PATH);
+    await page.waitForLoadState("domcontentloaded");
+    const pwInput = page.locator("input[type='password']");
+    await expect(pwInput).toBeVisible({ timeout: 10000 });
+
+    await pwInput.fill("wrong-password");
+    await page.getByRole("button", { name: /sign in/i }).click();
+    await expect(page.getByText(/incorrect password/i)).toBeVisible({ timeout: 10000 });
+
+    await pwInput.fill(ADMIN_PASSWORD);
+    await page.getByRole("button", { name: /sign in/i }).click();
+    await expect(page.locator("aside")).toBeVisible({ timeout: 15000 });
+    // session persists across reloads
+    await page.reload();
+    await page.waitForLoadState("domcontentloaded");
+    await expect(page.locator("aside")).toBeVisible({ timeout: 10000 });
   });
 });

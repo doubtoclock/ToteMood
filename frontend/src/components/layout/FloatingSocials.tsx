@@ -1,11 +1,12 @@
 "use client";
 
 import { usePathname } from "next/navigation";
+import { ADMIN_PATH } from "@/lib/admin-route";
 
 const WHATSAPP_URL = "https://wa.me/919890842755";
 const INSTAGRAM_URL = "https://instagram.com/totemood_gifts";
 
-const HIDDEN_PATHS = ["/admin", "/checkout", "/contact"];
+const HIDDEN_PATHS = [ADMIN_PATH, "/checkout", "/contact"];
 
 export function FloatingSocials() {
   const pathname = usePathname();

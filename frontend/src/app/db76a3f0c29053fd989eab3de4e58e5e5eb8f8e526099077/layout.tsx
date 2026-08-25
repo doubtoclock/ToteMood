@@ -4,6 +4,8 @@ import { useState, useEffect } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { LayoutDashboard, Package, ShoppingBag, LogOut, Lock } from "lucide-react";
+import { ADMIN_PATH, ADMIN_ROUTE } from "@/lib/admin-route";
+import { API_BASE_URL } from "@/lib/api";
 
 export default function AdminLayout({
   children,
@@ -14,37 +16,53 @@ export default function AdminLayout({
   const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(null);
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   useEffect(() => {
     const auth = localStorage.getItem("totemood_admin_auth");
-    if (auth === "true") {
+    if (auth === "true" && localStorage.getItem("totemood_admin_token")) {
       setIsAuthenticated(true);
     } else {
+      localStorage.removeItem("totemood_admin_auth");
       setIsAuthenticated(false);
     }
   }, []);
 
-  const handleLogin = (e: React.FormEvent) => {
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    // Simple hardcoded password for now
-    if (password === "admin123") {
+    setIsSubmitting(true);
+    setError("");
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/admin/login`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ password }),
+      });
+      const data = await res.json().catch(() => null);
+      if (!res.ok || !data?.token) {
+        setError(data?.error || "Incorrect password");
+        return;
+      }
       localStorage.setItem("totemood_admin_auth", "true");
+      localStorage.setItem("totemood_admin_token", data.token);
       setIsAuthenticated(true);
-      setError("");
-    } else {
-      setError("Incorrect password");
+    } catch {
+      setError("Could not reach the server. Try again.");
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
   const handleLogout = () => {
     localStorage.removeItem("totemood_admin_auth");
+    localStorage.removeItem("totemood_admin_token");
     setIsAuthenticated(false);
   };
 
   const navigation = [
-    { name: "Dashboard", href: "/admin", icon: LayoutDashboard },
-    { name: "Products", href: "/admin/products", icon: Package },
-    { name: "Orders", href: "/admin/orders", icon: ShoppingBag },
+    { name: "Dashboard", href: ADMIN_PATH, icon: LayoutDashboard },
+    { name: "Products", href: `${ADMIN_PATH}/products`, icon: Package },
+    { name: "Orders", href: `${ADMIN_PATH}/orders`, icon: ShoppingBag },
   ];
 
   // Still checking auth state
@@ -75,14 +93,15 @@ export default function AdminLayout({
               />
             </div>
             {error && <p className="text-red-500 text-xs font-bold">{error}</p>}
-            <button 
+            <button
               type="submit"
-              className="w-full bg-[#1C1C1A] text-white py-4 rounded-xl font-bold uppercase tracking-widest text-sm hover:bg-black transition-colors"
+              disabled={isSubmitting}
+              className="w-full bg-[#1C1C1A] text-white py-4 rounded-xl font-bold uppercase tracking-widest text-sm hover:bg-black transition-colors disabled:opacity-60"
             >
-              Sign In
+              {isSubmitting ? "Signing In..." : "Sign In"}
             </button>
           </form>
-          <p className="text-xs text-[#5A5A55] mt-8">Default password: <b>admin123</b></p>
+          <p className="text-xs text-[#5A5A55] mt-8">Authorized access only.</p>
         </div>
       </div>
     );

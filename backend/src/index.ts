@@ -22,6 +22,8 @@ const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID || process.env.NEXT_PUBLIC
 const SESSION_SECRET = process.env.SESSION_SECRET || RAZORPAY_KEY_SECRET || GOKWIK_APP_SECRET || 'totemood-dev-session-secret';
 const CHECKOUT_DEPOSIT_AMOUNT = 49;
 const defaultAllowedOrigins = [
+  'https://totemood.com',
+  'https://www.totemood.com',
   'https://totemood.mywire.org',
   'https://www.totemood.mywire.org',
   'http://localhost:3000',
@@ -46,7 +48,7 @@ const corsOptions: cors.CorsOptions = {
   },
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'gk-app-id', 'gk-app-secret', 'app-id', 'app-secret'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'x-admin-auth', 'gk-app-id', 'gk-app-secret', 'app-id', 'app-secret'],
 };
 
 // Middleware
@@ -380,6 +382,63 @@ function requireAuthUser(req: Request, res: Response): AuthUser | null {
     return null;
   }
   return user;
+}
+
+// --- Admin auth (scrypt-hashed password + signed admin token) ---
+
+const ADMIN_TOKEN_TTL_MS = 12 * 60 * 60 * 1000;
+
+function verifyAdminPassword(password: unknown): boolean {
+  const stored = String(process.env.ADMIN_PASSWORD_HASH || '');
+  const [scheme, saltHex, keyHex] = stored.split('$');
+  if (scheme !== 'scrypt' || !saltHex || !keyHex) return false;
+  try {
+    const derived = crypto.scryptSync(String(password || ''), Buffer.from(saltHex, 'hex'), 64);
+    const expected = Buffer.from(keyHex, 'hex');
+    return derived.length === expected.length && crypto.timingSafeEqual(derived, expected);
+  } catch {
+    return false;
+  }
+}
+
+function signAdminToken() {
+  const payload = base64Url(JSON.stringify({ role: 'admin', exp: Date.now() + ADMIN_TOKEN_TTL_MS }));
+  const signature = crypto.createHmac('sha256', SESSION_SECRET).update(payload).digest('base64url');
+  return `${payload}.${signature}`;
+}
+
+function verifyAdminToken(token: unknown): boolean {
+  const rawToken = String(token || '');
+  const [payload, signature] = rawToken.split('.');
+  if (!payload || !signature) return false;
+  const expectedSignature = crypto.createHmac('sha256', SESSION_SECRET).update(payload).digest('base64url');
+  if (signature.length !== expectedSignature.length) return false;
+  if (!crypto.timingSafeEqual(Buffer.from(signature), Buffer.from(expectedSignature))) return false;
+  try {
+    const data = JSON.parse(Buffer.from(payload, 'base64url').toString('utf8'));
+    return data.role === 'admin' && !!data.exp && Date.now() <= data.exp;
+  } catch {
+    return false;
+  }
+}
+
+function getAdminToken(req: Request): string {
+  const header = req.headers['x-admin-auth'];
+  if (typeof header === 'string' && header) return header;
+  const auth = req.headers.authorization || '';
+  return auth.startsWith('Admin ') ? auth.slice(6) : '';
+}
+
+function requireAdmin(req: Request, res: Response, next: NextFunction) {
+  if (!process.env.ADMIN_PASSWORD_HASH) {
+    res.status(503).json({ error: 'Admin access is not configured.' });
+    return;
+  }
+  if (!verifyAdminToken(getAdminToken(req))) {
+    res.status(401).json({ error: 'Admin authentication required.' });
+    return;
+  }
+  next();
 }
 
 async function verifyGoogleCredential(credential: unknown): Promise<AuthUser> {
@@ -1537,7 +1596,7 @@ app.get('/api/products/:id', async (req, res) => {
   }
 });
 
-app.post('/api/products', async (req, res) => {
+app.post('/api/products', requireAdmin, async (req, res) => {
   try {
     await ensureCatalogCustomizationColumns();
     const data = req.body;
@@ -1565,7 +1624,7 @@ app.post('/api/products', async (req, res) => {
   }
 });
 
-app.put('/api/products/:id', async (req, res) => {
+app.put('/api/products/:id', requireAdmin, async (req, res) => {
   try {
     await ensureCatalogCustomizationColumns();
     const data = req.body;
@@ -1594,7 +1653,7 @@ app.put('/api/products/:id', async (req, res) => {
   }
 });
 
-app.delete('/api/products/:id', async (req, res) => {
+app.delete('/api/products/:id', requireAdmin, async (req, res) => {
   try {
     await prisma.product.delete({ where: { id: req.params.id } });
     io.emit("products_updated");
@@ -1607,7 +1666,7 @@ app.delete('/api/products/:id', async (req, res) => {
 
 // --- Order Routes ---
 
-app.get('/api/orders', async (_req, res) => {
+app.get('/api/orders', requireAdmin, async (_req, res) => {
   try {
     const orders = await prisma.order.findMany({
       include: {
@@ -1638,7 +1697,7 @@ app.post('/api/orders', async (req, res) => {
   }
 });
 
-app.put('/api/orders/:id', async (req, res) => {
+app.put('/api/orders/:id', requireAdmin, async (req, res) => {
   try {
     const { status, displayId } = req.body;
     const updateData: Record<string, unknown> = {};
@@ -1691,7 +1750,7 @@ app.put('/api/orders/:id', async (req, res) => {
   }
 });
 
-app.delete('/api/orders/:id', async (req, res) => {
+app.delete('/api/orders/:id', requireAdmin, async (req, res) => {
   try {
     await prisma.orderItem.deleteMany({ where: { orderId: req.params.id } });
     await prisma.order.delete({ where: { id: req.params.id } });
@@ -1706,7 +1765,22 @@ app.delete('/api/orders/:id', async (req, res) => {
 
 // --- Admin Dashboard Stats ---
 
-app.get('/api/admin/stats', async (_req, res) => {
+app.post('/api/admin/login', async (req, res) => {
+  const password = req.body?.password;
+  if (!process.env.ADMIN_PASSWORD_HASH) {
+    res.status(503).json({ error: 'Admin access is not configured.' });
+    return;
+  }
+  if (!verifyAdminPassword(password)) {
+    // slow brute-force attempts slightly
+    await new Promise((resolve) => setTimeout(resolve, 700));
+    res.status(401).json({ error: 'Incorrect password' });
+    return;
+  }
+  res.json({ token: signAdminToken() });
+});
+
+app.get('/api/admin/stats', requireAdmin, async (_req, res) => {
   try {
     const [totalOrders, revenueResult, activeProducts] = await Promise.all([
       prisma.order.count(),
@@ -1725,7 +1799,7 @@ app.get('/api/admin/stats', async (_req, res) => {
   }
 });
 
-app.get('/api/admin/revenue-chart', async (_req, res) => {
+app.get('/api/admin/revenue-chart', requireAdmin, async (_req, res) => {
   try {
     const orders = await prisma.order.findMany({
       where: { status: 'DELIVER' },

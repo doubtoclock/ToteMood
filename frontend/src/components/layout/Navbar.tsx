@@ -12,6 +12,7 @@ import { useAuthStore } from "@/lib/store/useAuthStore";
 import { CartDrawer } from "@/components/cart/CartDrawer";
 import { ACCOUNT_AUTH_CHANGED_EVENT } from "@/lib/account";
 import { Rokkitt } from 'next/font/google';
+import { ADMIN_PATH } from "@/lib/admin-route";
 
 const logoFont = Rokkitt({ 
   weight: ['600'],
@@ -56,7 +57,7 @@ export function Navbar() {
 
   const handleLogout = signOut;
 
-  if (pathname?.startsWith("/admin")) {
+  if (pathname?.startsWith(ADMIN_PATH)) {
     return null;
   }
 

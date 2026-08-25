@@ -5,10 +5,13 @@ export const SOCKET_URL = API_BASE_URL;
 export const ENABLE_REALTIME = !API_BASE_URL.includes("vercel.app");
 
 export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
+  const adminToken =
+    typeof window !== "undefined" ? localStorage.getItem("totemood_admin_token") : null;
   const res = await fetch(`${API_BASE_URL}${path}`, {
     ...init,
     headers: {
       "Content-Type": "application/json",
+      ...(adminToken ? { "x-admin-auth": adminToken } : {}),
       ...(init?.headers || {}),
     },
     cache: init?.cache,

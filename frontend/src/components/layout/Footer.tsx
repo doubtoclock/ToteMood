@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Rokkitt } from 'next/font/google';
+import { ADMIN_PATH } from "@/lib/admin-route";
 
 const logoFont = Rokkitt({ 
   weight: ['600'],
@@ -15,7 +16,7 @@ const INSTAGRAM_URL = "https://instagram.com/totemood_gifts";
 export function Footer() {
   const pathname = usePathname();
 
-  if (pathname?.startsWith("/admin")) return null;
+  if (pathname?.startsWith(ADMIN_PATH)) return null;
 
   return (
     <footer className="bg-[#252A1A] text-white">
