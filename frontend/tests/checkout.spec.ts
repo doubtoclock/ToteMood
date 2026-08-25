@@ -61,6 +61,10 @@ test.describe("Checkout Page", () => {
     await page.locator("a[href='/checkout']").first().click();
     // scope to main so the (hidden-on-mobile) navbar Sign in link doesn't match first
     await expect(page.locator("main").getByText(/sign in/i).first()).toBeVisible({ timeout: 15000 });
+    // privacy consent is shown right before the login step
+    await expect(
+      page.getByTestId(/privacy-consent|privacy-consent-recorded/).first()
+    ).toBeVisible({ timeout: 10000 });
   });
 
   test("X03 - signed-in checkout shows contact form fields", async ({ page }) => {

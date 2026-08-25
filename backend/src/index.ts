@@ -942,6 +942,34 @@ app.get('/api/account/orders', async (req, res) => {
   }
 });
 
+// Permanently (hard) deletes every piece of data tied to the signed-in user:
+// all orders (cascading their items), and all saved addresses.
+app.delete('/api/account/data', async (req, res) => {
+  try {
+    const user = requireAuthUser(req, res);
+    if (!user) return;
+
+    const emailFilter = { equals: user.email, mode: 'insensitive' as const };
+
+    const orders = await prisma.order.deleteMany({ where: { customerEmail: emailFilter } });
+    let addresses = { count: 0 };
+    try {
+      addresses = await prisma.savedAddress.deleteMany({ where: { email: emailFilter } });
+    } catch (error) {
+      if (!isMissingSavedAddressTableError(error)) throw error;
+    }
+
+    res.json({
+      message: 'All your data has been permanently deleted.',
+      deletedOrders: orders.count,
+      deletedAddresses: addresses.count,
+    });
+  } catch (error) {
+    console.error('Failed to delete account data:', error);
+    res.status(500).json({ error: 'Failed to delete your data. Please try again.' });
+  }
+});
+
 app.get('/api/account/addresses', async (req, res) => {
   try {
     const user = requireAuthUser(req, res);

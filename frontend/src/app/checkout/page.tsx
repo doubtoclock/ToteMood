@@ -12,6 +12,7 @@ import { SavedAddress, accountAuthHeaders, getStoredAccountProfile } from "@/lib
 import { useAuthStore } from "@/lib/store/useAuthStore";
 import { compressImageForUpload } from "@/lib/imageCompression";
 import { LogoText } from "@/components/ui/LogoText";
+import PrivacyConsent from "@/components/PrivacyConsent";
 
 declare global {
   interface Window {
@@ -486,6 +487,9 @@ export default function CheckoutPage() {
           <div className="flex justify-center">
             {/* GOOGLE_CLIENT_ID check removed to fix compiler error, as the login button belongs in a client component or header */}
             <p className="text-[13px] font-medium text-[#B5483B]">Please log in from the main menu.</p>
+          </div>
+          <div className="mt-6 flex justify-center text-left">
+            <PrivacyConsent />
           </div>
           <Link href="/shop" className="inline-flex items-center mt-8 text-[12px] font-bold uppercase tracking-widest text-[#8C867C] hover:text-[#252A1A] transition-colors">
             <ArrowLeft className="w-3 h-3 mr-1.5" />

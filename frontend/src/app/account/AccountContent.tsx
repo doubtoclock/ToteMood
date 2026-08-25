@@ -15,6 +15,7 @@ import {
   getStoredAccountProfile,
 } from "@/lib/account";
 import { useAuthStore } from "@/lib/store/useAuthStore";
+import PrivacyConsent, { usePrivacyAccepted } from "@/components/PrivacyConsent";
 import { Loader2, MapPin, Package, Plus, Trash2, User, LogOut } from "lucide-react";
 
 type AccountTab = "details" | "orders" | "addresses";
@@ -110,6 +111,9 @@ export function AccountContent() {
   const [isSavingAddress, setIsSavingAddress] = useState(false);
   const [deletingAddressId, setDeletingAddressId] = useState<string | null>(null);
   const [showLogoutModal, setShowLogoutModal] = useState(false);
+  const [showDeleteDataModal, setShowDeleteDataModal] = useState(false);
+  const [isDeletingData, setIsDeletingData] = useState(false);
+  const privacyAccepted = usePrivacyAccepted();
 
   const accountEmail = profile.email.trim().toLowerCase();
   const selectedOrder = orders.find((order) => order.id === selectedOrderId) || null;
@@ -129,6 +133,24 @@ export function AccountContent() {
   useEffect(() => {
     hydrateAuth();
   }, [hydrateAuth]);
+
+  const handleDeleteAllData = async () => {
+    if (!accountToken || isDeletingData) return;
+    setIsDeletingData(true);
+    try {
+      await apiFetch<{ message: string }>("/api/account/data", {
+        method: "DELETE",
+        headers: accountAuthHeaders(),
+      });
+      setShowDeleteDataModal(false);
+      signOut();
+      setMessage("All your data has been permanently deleted. You have been signed out.");
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Could not delete your data.");
+    } finally {
+      setIsDeletingData(false);
+    }
+  };
 
   const handleGoogleCredential = useCallback(async (credential: string) => {
     try {
@@ -299,9 +321,17 @@ export function AccountContent() {
       {!accountToken ? (
         <div key="account-signed-out" className="max-w-[650px]">
           <p className="text-[14px] text-[#686B59] mb-5">Sign in with Google to see your own orders and saved addresses.</p>
-          {GOOGLE_CLIENT_ID ? (
-            <div ref={setGoogleButtonNode} />
-          ) : (
+          <div className="mb-5">
+            <PrivacyConsent />
+          </div>
+          {!privacyAccepted ? (
+            <p data-testid="consent-required-note" className="text-[13px] font-medium text-[#B5483B] mb-2">
+              Please accept the Privacy Policy above to sign in.
+            </p>
+          ) : null}
+          {GOOGLE_CLIENT_ID && privacyAccepted ? (
+            <div ref={setGoogleButtonNode} data-testid="google-signin-mount" />
+          ) : GOOGLE_CLIENT_ID ? null : (
             <p className="text-[13px] font-medium text-[#B5483B]">Google login is missing NEXT_PUBLIC_GOOGLE_CLIENT_ID.</p>
           )}
         </div>
@@ -526,6 +556,16 @@ export function AccountContent() {
                 <LogOut size={18} strokeWidth={1.5} />
                 Log out
               </button>
+              {accountToken && (
+                <button
+                  onClick={() => setShowDeleteDataModal(true)}
+                  data-testid="delete-all-data-button"
+                  className="flex items-center gap-3 px-4 py-2 rounded-[12px] text-[#B5483B] hover:bg-red-50 font-medium transition-all shrink-0 lg:shrink-auto"
+                >
+                  <Trash2 size={18} strokeWidth={1.5} />
+                  Delete All My Data
+                </button>
+              )}
             </div>
 
             <div>
@@ -563,6 +603,46 @@ export function AccountContent() {
                 className="flex-1 bg-[#b06161] text-white h-[46px] rounded-[14px] text-[12px] font-bold uppercase tracking-widest hover:bg-[#9a5454] transition-colors"
               >
                 Log Out
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete All My Data Confirmation Modal */}
+      {showDeleteDataModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm">
+          <div
+            data-testid="delete-data-modal"
+            className="bg-white rounded-[24px] p-8 max-w-[420px] w-full shadow-2xl border border-[#E8E5DC]"
+          >
+            <h3 className="text-[20px] font-title text-[#B5483B] mb-3">Delete All My Data</h3>
+            <p className="text-[15px] text-[#5A5A55] mb-4">
+              This permanently and irreversibly hard-deletes <b>everything</b> tied to your account from our servers:
+              all orders, order items, custom photos, and saved addresses.
+            </p>
+            {orders.length > 0 && (
+              <p data-testid="delete-orders-warning" className="text-[14px] font-semibold text-[#B5483B] mb-4">
+                Warning: you have {orders.length} order{orders.length === 1 ? "" : "s"} — your orders will be lost forever.
+              </p>
+            )}
+            <p className="text-[13px] text-[#686B59] mb-8">This action cannot be undone.</p>
+            <div className="flex gap-3">
+              <button
+                onClick={() => setShowDeleteDataModal(false)}
+                disabled={isDeletingData}
+                className="flex-1 border border-[#E8E5DC] h-[46px] rounded-[14px] text-[12px] font-bold uppercase tracking-widest text-[#686B59] hover:bg-[#F5F3EC]/50 transition-colors disabled:opacity-60"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleDeleteAllData}
+                disabled={isDeletingData}
+                data-testid="confirm-delete-data"
+                className="flex-1 bg-[#B5483B] text-white h-[46px] rounded-[14px] text-[12px] font-bold uppercase tracking-widest hover:bg-[#9A3C31] transition-colors disabled:cursor-not-allowed disabled:opacity-70 inline-flex items-center justify-center gap-2"
+              >
+                {isDeletingData && <Loader2 size={14} className="animate-spin" />}
+                {isDeletingData ? "Deleting..." : "Delete Everything"}
               </button>
             </div>
           </div>

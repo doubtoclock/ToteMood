@@ -30,10 +30,14 @@ test.describe("Authentication", () => {
     await expect(page.getByText(/sign in with google to see your own orders/i).first()).toBeVisible({ timeout: 10000 });
   });
 
-  test("AU03 - GSI client script is loaded on account page", async ({ page }) => {
+  test("AU03 - GSI client script is loaded on account page after consent", async ({ page }) => {
     await page.goto("/account");
     await page.waitForLoadState("domcontentloaded");
-    await expect(page.locator("script[src*='gsi/client']").first()).toBeAttached({ timeout: 10000 });
+    // Google Identity Services only loads once privacy consent is accepted
+    const consent = page.getByTestId("privacy-consent");
+    await expect(consent).toBeVisible({ timeout: 10000 });
+    await consent.locator("input[type=checkbox]").click();
+    await expect(page.locator("script[src*='gsi/client']").first()).toBeAttached({ timeout: 15000 });
   });
 
   test("AU04 - signed-out navbar shows Sign in and no logout", async ({ page }) => {
@@ -99,5 +103,38 @@ test.describe("Authentication", () => {
     await expect(page.getByRole("link", { name: "My Orders" })).toBeVisible();
     // Sign out is handled from the account page, not the mobile menu
     await expect(page.getByRole("button", { name: /sign out/i })).toHaveCount(0);
+  });
+
+  test("AU09 - sign-in is gated behind privacy policy consent", async ({ page }) => {
+    await page.goto("/account");
+    await page.waitForLoadState("domcontentloaded");
+    const consent = page.getByTestId("privacy-consent");
+    await expect(consent).toBeVisible({ timeout: 10000 });
+    // Google sign-in button must not be mounted before consent is given
+    await expect(page.getByTestId("google-signin-mount")).toHaveCount(0);
+    await expect(page.getByTestId("consent-required-note")).toBeVisible();
+    // click() not check(): accepting consent swaps the checkbox for a "recorded" note
+    await consent.locator("input[type=checkbox]").click();
+    await expect(page.getByTestId("google-signin-mount")).toBeVisible({ timeout: 10000 });
+    // Consent is remembered across reloads
+    await page.reload();
+    await expect(page.getByTestId("privacy-consent-recorded")).toBeVisible({ timeout: 10000 });
+  });
+
+  test("AU10 - delete-all-my-data modal warns about lost orders and can be cancelled", async ({ page }) => {
+    await signInWithStorage(page);
+    await page.goto("/account");
+    await page.waitForLoadState("domcontentloaded");
+    const deleteButton = page.getByTestId("delete-all-data-button");
+    await expect(deleteButton).toBeVisible({ timeout: 10000 });
+    await deleteButton.click();
+    const modal = page.getByTestId("delete-data-modal");
+    await expect(modal).toBeVisible();
+    await expect(modal).toContainText(/permanently/i);
+    await expect(modal).toContainText(/cannot be undone/i);
+    // Cancel leaves the session intact
+    await modal.getByRole("button", { name: /cancel/i }).click();
+    await expect(modal).toHaveCount(0);
+    await expect(page.getByTestId("delete-all-data-button")).toBeVisible();
   });
 });
