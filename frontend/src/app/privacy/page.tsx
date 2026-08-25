@@ -26,7 +26,7 @@ export default function PrivacyPolicyPage() {
           className="rounded-[20px] border-2 border-[#8E9476] bg-[#F0F2E6] p-6 md:p-8 mb-12 shadow-sm"
         >
           <p className="text-[18px] md:text-[22px] font-bold text-[#3E4530] leading-snug">
-            The photos shared on the website are private and safe. They are never sent anywhere — not to us, not to any
+            The photos shared on the website are private and safe. They are never sent anywhere — not to any
             third party.
           </p>
           <p className="text-[13px] text-[#5A5A55] mt-3">
@@ -79,10 +79,6 @@ export default function PrivacyPolicyPage() {
             <li>
               <b>Razorpay:</b> processes your payment. Card/UPI details go directly to Razorpay — we never see or store
               them.
-            </li>
-            <li>
-              <b>GoKwik:</b> used for checkout fraud checks and order tracking. Order and contact details needed for
-              delivery are shared with them.
             </li>
             <li>
               <b>Shipping partners:</b> your name, address, and phone are shared so your tote actually reaches you.

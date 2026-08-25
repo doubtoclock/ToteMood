@@ -18,7 +18,7 @@ test.describe("Privacy Policy", () => {
     await page.goto("/privacy");
     await page.waitForLoadState("domcontentloaded");
     const main = page.locator("main");
-    for (const term of [/localStorage/i, /Supabase/i, /Vercel/i, /Render/i, /Razorpay/i, /GoKwik/i]) {
+    for (const term of [/localStorage/i, /Supabase/i, /Vercel/i, /Render/i, /Razorpay/i]) {
       await expect(main.getByText(term).first()).toBeVisible({ timeout: 10000 });
     }
     // Deletion option is documented
