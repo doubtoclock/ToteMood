@@ -13,6 +13,7 @@ import { useAuthStore } from "@/lib/store/useAuthStore";
 import { compressImageForUpload } from "@/lib/imageCompression";
 import { LogoText } from "@/components/ui/LogoText";
 import PrivacyConsent from "@/components/PrivacyConsent";
+import { GoogleSignInControls } from "@/components/InlineSignIn";
 
 declare global {
   interface Window {
@@ -484,12 +485,10 @@ export default function CheckoutPage() {
           <p className="text-[15px] text-[#686B59] mb-8 leading-relaxed">
             Please sign in with your Google account to complete your order.
           </p>
-          <div className="flex justify-center">
-            {/* GOOGLE_CLIENT_ID check removed to fix compiler error, as the login button belongs in a client component or header */}
-            <p className="text-[13px] font-medium text-[#B5483B]">Please log in from the main menu.</p>
-          </div>
-          <div className="mt-6 flex justify-center text-left">
+          <div className="mt-8 flex flex-col items-center gap-4">
+            <p className="text-[13px] font-medium text-[#B5483B]">Sign in below to continue.</p>
             <PrivacyConsent />
+            <GoogleSignInControls />
           </div>
           <Link href="/shop" className="inline-flex items-center mt-8 text-[12px] font-bold uppercase tracking-widest text-[#8C867C] hover:text-[#252A1A] transition-colors">
             <ArrowLeft className="w-3 h-3 mr-1.5" />

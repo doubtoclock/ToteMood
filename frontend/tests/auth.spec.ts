@@ -137,4 +137,17 @@ test.describe("Authentication", () => {
     await expect(modal).toHaveCount(0);
     await expect(page.getByTestId("delete-all-data-button")).toBeVisible();
   });
+
+  test("AU11 - adding to cart while signed out offers inline sign-in with consent", async ({ page }) => {
+    await page.goto("/shop");
+    await page.waitForLoadState("domcontentloaded");
+    await page.locator("button[aria-label^='Add']").first().click();
+    const toast = page.getByTestId("signin-toast");
+    await expect(toast).toBeVisible({ timeout: 10000 });
+    await expect(toast.getByTestId(/privacy-consent|privacy-consent-recorded/).first()).toBeVisible();
+    await expect(toast).toContainText(/account page/i);
+    // toast is dismissible
+    await toast.getByRole("button", { name: /dismiss sign in/i }).click();
+    await expect(toast).toHaveCount(0);
+  });
 });

@@ -1,5 +1,3 @@
-import fetch from 'node-fetch';
-
 async function testOrder() {
   // Get a product first
   const prodRes = await fetch('http://localhost:4000/api/products');

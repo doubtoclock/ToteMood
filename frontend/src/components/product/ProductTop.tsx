@@ -6,6 +6,8 @@ import { Star, Truck, CheckCircle2, Lock } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { Product } from "@/lib/data/products";
 import { useCartStore } from "@/lib/store/useCartStore";
+import { useAuthStore } from "@/lib/store/useAuthStore";
+import { SignInToast } from "@/components/InlineSignIn";
 
 const WHATSAPP_URL = "https://wa.me/919890842755?text=Hi%20Totemood!%20I%27d%20like%20a%20free%20sample%20preview%20please.";
 const labelText = (label?: Product["label"]) => {
@@ -21,6 +23,13 @@ const customizationText = (category: string) => {
 export function ProductTop({ product }: { product: Product }) {
   const router = useRouter();
   const addItem = useCartStore((state) => state.addItem);
+  const accountToken = useAuthStore((state) => state.token);
+  const [showSignIn, setShowSignIn] = useState(false);
+
+  const handleAddToCart = () => {
+    addItem(product);
+    if (!accountToken) setShowSignIn(true);
+  };
 
   const oldPrice = product.oldPrice ?? product.originalPrice;
 
@@ -216,8 +225,8 @@ export function ProductTop({ product }: { product: Product }) {
 
             {/* Action Buttons */}
             <div className="flex flex-col gap-3 mb-6">
-              <button 
-                onClick={() => addItem(product)}
+              <button
+                onClick={handleAddToCart}
                 className="w-full h-14 rounded-[14px] bg-[#8E9476] text-white text-[14px] font-bold uppercase tracking-widest hover:bg-[#7a8063] transition-colors shadow-sm"
               >
                 {product.isCustomizable ? "Customize & Add to Cart" : "Add to Cart"}
@@ -240,6 +249,7 @@ export function ProductTop({ product }: { product: Product }) {
           </div>
         </div>
       </div>
+      <SignInToast open={showSignIn} />
     </section>
   );
 }

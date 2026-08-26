@@ -9,7 +9,7 @@ export const ADMIN_SESSION_EXPIRED_EVENT = "totemood_admin_expired";
 // Paths the backend guards with requireAdmin
 function isAdminGatedPath(path: string, method?: string): boolean {
   if (path.startsWith("/api/admin")) return true;
-  if (path === "/api/orders") return true;
+  if (path.startsWith("/api/orders")) return true;
   if (path.startsWith("/api/products") && (method || "GET") !== "GET") return true;
   return false;
 }
