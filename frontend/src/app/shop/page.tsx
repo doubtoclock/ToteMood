@@ -9,6 +9,7 @@ import { ShopNewsletter } from "@/components/shop/ShopNewsletter";
 import { CustomerStories } from "@/components/home/CustomerStories";
 import { useProducts } from "@/lib/useProducts";
 import { useCartStore } from "@/lib/store/useCartStore";
+import { offerSignInIfSignedOut } from "@/lib/store/useSignInPrompt";
 
 export default function ShopPage() {
   const { products, loading } = useProducts();
@@ -68,7 +69,10 @@ export default function ShopPage() {
                   <button
                     type="button"
                     aria-label={`Add ${product.name} to cart`}
-                    onClick={() => addItem(product)}
+                    onClick={() => {
+                      addItem(product);
+                      offerSignInIfSignedOut();
+                    }}
                     className="absolute bottom-2 right-2 sm:bottom-4 sm:right-4 bg-white/90 backdrop-blur-sm w-8 h-8 sm:w-10 sm:h-10 rounded-full shadow-sm flex items-center justify-center opacity-0 transform translate-y-2 group-hover:opacity-100 group-hover:translate-y-0 transition-all duration-300 z-10 text-[#252A1A] hover:bg-[#252A1A] hover:text-white"
                   >
                     <ShoppingCart className="w-[14px] h-[14px] sm:w-[18px] sm:h-[18px]" strokeWidth={1.5} />

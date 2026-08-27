@@ -4,6 +4,7 @@ import { SmoothScroll } from "@/components/layout/SmoothScroll";
 import { Navbar } from "@/components/layout/Navbar";
 import { FloatingSocials } from "@/components/layout/FloatingSocials";
 import { Footer } from "@/components/layout/Footer";
+import { GlobalSignInToast } from "@/components/InlineSignIn";
 import "./globals.css";
 
 const agatho = localFont({
@@ -86,6 +87,7 @@ export default function RootLayout({
           {children}
           <Footer />
           <FloatingSocials />
+          <GlobalSignInToast />
         </SmoothScroll>
       </body>
     </html>

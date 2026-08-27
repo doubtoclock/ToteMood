@@ -2,23 +2,21 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { useState } from "react";
 import { ArrowRight, ShoppingCart, Star } from "lucide-react";
 import { useProducts } from "@/lib/useProducts";
 import { useCartStore } from "@/lib/store/useCartStore";
 import { useAuthStore } from "@/lib/store/useAuthStore";
-import { SignInToast } from "@/components/InlineSignIn";
+import { offerSignInIfSignedOut } from "@/lib/store/useSignInPrompt";
 
 export function ShopTrending() {
   const { products } = useProducts();
   const addItem = useCartStore((state) => state.addItem);
   const accountToken = useAuthStore((state) => state.token);
-  const [showSignIn, setShowSignIn] = useState(false);
   const trendingProducts = products.slice(0, 4);
 
   const quickAdd = (product: Parameters<typeof addItem>[0]) => {
     addItem(product);
-    if (!accountToken) setShowSignIn(true);
+    if (!accountToken) offerSignInIfSignedOut();
   };
 
   return (
@@ -98,7 +96,6 @@ export function ShopTrending() {
           ))}
         </div>
       </div>
-      <SignInToast open={showSignIn} />
     </section>
   );
 }

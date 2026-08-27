@@ -530,42 +530,45 @@ export function AccountContent() {
           </div>
 
           <div className="w-full grid grid-cols-1 lg:grid-cols-[250px_minmax(0,850px)] gap-6 lg:gap-7">
-            <div className="flex lg:flex-col overflow-x-auto whitespace-nowrap lg:whitespace-normal pb-4 lg:pb-0 hide-scrollbar gap-1 lg:bg-white lg:rounded-[20px] lg:p-4 lg:border lg:border-[#E8E5DC]">
-              {[
-                { key: "details" as const, label: "Account Details", icon: User },
-                { key: "orders" as const, label: "Order History", icon: Package },
-                { key: "addresses" as const, label: "Addresses", icon: MapPin },
-              ].map((item) => {
-                const Icon = item.icon;
-                return (
-                  <button
-                    key={item.key}
-                    onClick={() => { setActiveTab(item.key); setSelectedOrderId(null); }}
-                    className={`flex items-center gap-3 px-4 py-2 rounded-[12px] font-medium transition-all shrink-0 lg:shrink-auto ${activeTab === item.key ? "bg-[#F5F3EC]/70 text-[#252A1A]" : "text-[#686B59] hover:bg-[#F5F3EC]/50 hover:text-[#252A1A] bg-transparent"}`}
-                  >
-                    <Icon size={18} strokeWidth={1.5} />
-                    {item.label}
-                  </button>
-                );
-              })}
-              <div className="hidden lg:block h-px bg-[#E8E5DC] my-3" />
-              <button
-                onClick={() => setShowLogoutModal(true)}
-                className="flex items-center gap-3 px-4 py-2 rounded-[12px] text-[#b06161] hover:bg-red-50 font-medium transition-all shrink-0 lg:shrink-auto"
-              >
-                <LogOut size={18} strokeWidth={1.5} />
-                Log out
-              </button>
-              {accountToken && (
+            <div>
+              <div className="flex lg:flex-col overflow-x-auto whitespace-nowrap lg:whitespace-normal pb-4 lg:pb-0 hide-scrollbar gap-1 lg:bg-white lg:rounded-[20px] lg:p-4 lg:border lg:border-[#E8E5DC]">
+                {[
+                  { key: "details" as const, label: "Account Details", icon: User },
+                  { key: "orders" as const, label: "Order History", icon: Package },
+                  { key: "addresses" as const, label: "Addresses", icon: MapPin },
+                ].map((item) => {
+                  const Icon = item.icon;
+                  return (
+                    <button
+                      key={item.key}
+                      onClick={() => { setActiveTab(item.key); setSelectedOrderId(null); }}
+                      className={`flex items-center gap-3 px-4 py-2 rounded-[12px] font-medium transition-all shrink-0 lg:shrink-auto ${activeTab === item.key ? "bg-[#F5F3EC]/70 text-[#252A1A]" : "text-[#686B59] hover:bg-[#F5F3EC]/50 hover:text-[#252A1A] bg-transparent"}`}
+                    >
+                      <Icon size={18} strokeWidth={1.5} />
+                      {item.label}
+                    </button>
+                  );
+                })}
+              </div>
+              <div className="mt-3 flex lg:flex-col gap-2">
                 <button
-                  onClick={() => setShowDeleteDataModal(true)}
-                  data-testid="delete-all-data-button"
-                  className="flex items-center gap-3 px-4 py-2 rounded-[12px] text-[#B5483B] hover:bg-red-50 font-medium transition-all shrink-0 lg:shrink-auto"
+                  onClick={() => setShowLogoutModal(true)}
+                  className="flex items-center gap-3 px-4 py-2.5 rounded-[12px] text-[#b06161] hover:bg-red-50 font-medium transition-all text-[13px] lg:text-[14px] bg-white lg:bg-transparent border border-[#E8E5DC] lg:border-0"
                 >
-                  <Trash2 size={18} strokeWidth={1.5} />
-                  Delete All My Data
+                  <LogOut size={18} strokeWidth={1.5} />
+                  Log out
                 </button>
-              )}
+                {accountToken && (
+                  <button
+                    onClick={() => setShowDeleteDataModal(true)}
+                    data-testid="delete-all-data-button"
+                    className="flex items-center gap-3 px-4 py-2.5 rounded-[12px] text-[#B5483B] hover:bg-red-50 font-medium transition-all text-[13px] lg:text-[14px] bg-white lg:bg-transparent border border-[#E8E5DC] lg:border-0"
+                  >
+                    <Trash2 size={18} strokeWidth={1.5} />
+                    Delete All My Data
+                  </button>
+                )}
+              </div>
             </div>
 
             <div>

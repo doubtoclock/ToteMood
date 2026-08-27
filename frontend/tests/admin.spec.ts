@@ -4,13 +4,30 @@ import { TEST_API_BASE } from "./utils";
 
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || "Siya@2904";
 
-// Logs in against the backend and seeds the admin session before the app boots
-async function seedAdminSession(page: import("@playwright/test").Page) {
-  const res = await page.request.post(`${TEST_API_BASE}/api/admin/login`, {
-    data: { password: ADMIN_PASSWORD },
+// Logs in against the backend and seeds the admin session before the app boots.
+// The token is cached per worker so a full suite only hits /api/admin/login a
+// handful of times instead of once per test (the backend rate-limits it).
+let cachedToken: Promise<string> | null = null;
+
+async function adminToken(): Promise<string> {
+  cachedToken ??= (async () => {
+    const res = await fetch(`${TEST_API_BASE}/api/admin/login`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ password: ADMIN_PASSWORD }),
+    });
+    if (!res.ok) throw new Error(`Admin login failed: ${res.status}`);
+    const data = (await res.json()) as { token: string };
+    return data.token;
+  })().catch((error) => {
+    cachedToken = null; // allow a retry on the next test
+    throw error;
   });
-  if (!res.ok()) throw new Error(`Admin login failed: ${res.status()}`);
-  const { token } = (await res.json()) as { token: string };
+  return cachedToken;
+}
+
+async function seedAdminSession(page: import("@playwright/test").Page) {
+  const token = await adminToken();
   await page.addInitScript((t) => {
     localStorage.setItem("totemood_admin_auth", "true");
     localStorage.setItem("totemood_admin_token", t);
@@ -51,9 +68,9 @@ test.describe("Admin Panel", () => {
     await page.locator("aside a").filter({ hasText: /^orders$/i }).first().click();
     // Orders fetch is large (~20s+ against the live database)
     await expect(page.getByRole("heading", { name: /orders/i }).first()).toBeVisible({ timeout: 75_000 });
-    // CSV export is available when there is order data
+    // CSV export is available when there is order data (one button per date group)
     await expect(
-      page.getByRole("button", { name: /download csv/i }).or(page.getByText(/no orders found/i))
+      page.getByRole("button", { name: /download csv/i }).or(page.getByText(/no orders found/i)).first()
     ).toBeVisible({ timeout: 30_000 });
   });
 

@@ -19,9 +19,18 @@ const GOKWIK_APP_ID = process.env.GOKWIK_APP_ID || '';
 const GOKWIK_APP_SECRET = process.env.GOKWIK_APP_SECRET || '';
 const RAZORPAY_KEY_ID = process.env.RAZORPAY_KEY_ID || '';
 const RAZORPAY_KEY_SECRET = process.env.RAZORPAY_KEY_SECRET || '';
+const RAZORPAY_WEBHOOK_SECRET = process.env.RAZORPAY_WEBHOOK_SECRET || '';
 const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID || process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID || '';
 const SESSION_SECRET = process.env.SESSION_SECRET || (!isProduction ? 'totemood-dev-session-secret' : '');
 const CHECKOUT_DEPOSIT_AMOUNT = 49;
+
+// Amount actually collected from Razorpay for this checkout.
+// Prepaid: the full order. COD: the deposit only (rest is cash on delivery).
+function payoutAmountFor(checkout: PendingCheckout): number {
+  return checkout.paymentMethod === 'prepaid'
+    ? checkout.total
+    : Math.min(CHECKOUT_DEPOSIT_AMOUNT, checkout.total);
+}
 const productionAllowedOrigins = [
   'https://totemood.com',
   'https://www.totemood.com',
@@ -62,6 +71,22 @@ const corsOptions: cors.CorsOptions = {
 app.disable('x-powered-by');
 app.set('trust proxy', 1);
 app.use(cors(corsOptions));
+// Capture the raw request body for the Razorpay webhook BEFORE express.json()
+// parses and replaces it, so we can verify the HMAC signature over the exact
+// bytes Razorpay sent.
+app.use('/api/webhooks/razorpay', (req: Request, _res: Response, next: NextFunction) => {
+  const chunks: Buffer[] = [];
+  let total = 0;
+  req.on('data', (chunk: Buffer) => {
+    chunks.push(chunk);
+    total += chunk.length;
+  });
+  req.on('end', () => {
+    (req as any).rawWebhookBody = Buffer.concat(chunks, total);
+    next();
+  });
+  req.on('error', next);
+});
 app.use(express.json({ limit: JSON_BODY_LIMIT }));
 app.use((_req: Request, res: Response, next: NextFunction) => {
   res.setHeader('X-Content-Type-Options', 'nosniff');
@@ -367,6 +392,103 @@ const MAX_ITEM_QUANTITY = 10;
 const MAX_CUSTOM_TEXT_LENGTH = 200;
 const MAX_CHECKOUT_IMAGE_LENGTH = 250_000;
 const SAFE_DATA_IMAGE_PATTERN = /^data:image\/(?:jpeg|jpg|png|webp);base64,[a-z0-9+/=]+$/i;
+const CHECKOUT_TTL_MS = 30 * 60 * 1000;
+
+// --- Persistent checkouts ---
+// The in-memory map above is a fast-path cache only. The authoritative copy
+// lives in the "PendingCheckout" table so a paid checkout survives a Render
+// restart, instance change, or horizontal scale-out.
+let pendingCheckoutTableReady = false;
+async function ensurePendingCheckoutTable() {
+  if (pendingCheckoutTableReady) return;
+  await prisma.$executeRawUnsafe(`
+    CREATE TABLE IF NOT EXISTS "PendingCheckout" (
+      "id" TEXT NOT NULL,
+      "data" JSONB NOT NULL,
+      "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      "expiresAt" TIMESTAMP(3) NOT NULL,
+      "processedAt" TIMESTAMP(3),
+      CONSTRAINT "PendingCheckout_pkey" PRIMARY KEY ("id")
+    );
+  `);
+  await prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS "PendingCheckout_createdAt_idx" ON "PendingCheckout"("createdAt");`);
+  pendingCheckoutTableReady = true;
+}
+
+let orderPaymentColumnsReady = false;
+async function ensureOrderPaymentColumns() {
+  if (orderPaymentColumnsReady) return;
+  await prisma.$executeRawUnsafe(`ALTER TABLE "Order" ADD COLUMN IF NOT EXISTS "razorpayOrderId" TEXT;`);
+  await prisma.$executeRawUnsafe(`ALTER TABLE "Order" ADD COLUMN IF NOT EXISTS "razorpayPaymentId" TEXT;`);
+  await prisma.$executeRawUnsafe(`ALTER TABLE "Order" ADD COLUMN IF NOT EXISTS "paidAmount" DOUBLE PRECISION NOT NULL DEFAULT 0;`);
+  await prisma.$executeRawUnsafe(`ALTER TABLE "Order" ADD COLUMN IF NOT EXISTS "codBalance" DOUBLE PRECISION NOT NULL DEFAULT 0;`);
+  await prisma.$executeRawUnsafe(`ALTER TABLE "Order" ADD COLUMN IF NOT EXISTS "paymentStatus" TEXT NOT NULL DEFAULT 'pending';`);
+  await prisma.$executeRawUnsafe(`CREATE UNIQUE INDEX IF NOT EXISTS "Order_razorpayPaymentId_key" ON "Order"("razorpayPaymentId") WHERE "razorpayPaymentId" IS NOT NULL;`);
+  await prisma.$executeRawUnsafe(`CREATE UNIQUE INDEX IF NOT EXISTS "Order_razorpayOrderId_key" ON "Order"("razorpayOrderId") WHERE "razorpayOrderId" IS NOT NULL;`);
+  orderPaymentColumnsReady = true;
+}
+
+async function savePendingCheckout(id: string, checkout: PendingCheckout, ttlMs = CHECKOUT_TTL_MS) {
+  pendingCheckouts.set(id, checkout);
+  try {
+    await ensurePendingCheckoutTable();
+    await prisma.$executeRawUnsafe(
+      `INSERT INTO "PendingCheckout" ("id", "data", "createdAt", "expiresAt")
+       VALUES ($1, $2::jsonb, $3, $4)
+       ON CONFLICT ("id") DO UPDATE SET "data" = EXCLUDED."data", "expiresAt" = EXCLUDED."expiresAt";`,
+      id,
+      JSON.stringify(checkout),
+      new Date(checkout.createdAt),
+      new Date(Date.now() + ttlMs)
+    );
+  } catch (error) {
+    console.error('Failed to persist pending checkout:', error);
+  }
+}
+
+async function getPendingCheckout(id: string): Promise<PendingCheckout | null> {
+  const cached = pendingCheckouts.get(id);
+  if (cached) return cached;
+  try {
+    await ensurePendingCheckoutTable();
+    const rows = await prisma.$queryRawUnsafe<Array<{ data: string }>>(
+      `SELECT "data" FROM "PendingCheckout" WHERE "id" = $1 AND "expiresAt" > NOW() LIMIT 1;`,
+      id
+    );
+    if (!rows[0]) return null;
+    const checkout = JSON.parse(rows[0].data) as PendingCheckout;
+    pendingCheckouts.set(id, checkout);
+    return checkout;
+  } catch (error) {
+    console.error('Failed to load pending checkout:', error);
+    return null;
+  }
+}
+
+async function deletePendingCheckout(id: string) {
+  pendingCheckouts.delete(id);
+  try {
+    await ensurePendingCheckoutTable();
+    await prisma.$executeRawUnsafe(`DELETE FROM "PendingCheckout" WHERE "id" = $1;`, id);
+  } catch (error) {
+    console.error('Failed to delete pending checkout:', error);
+  }
+}
+
+async function findStalePendingCheckouts(): Promise<Array<{ id: string; data: PendingCheckout }>> {
+  try {
+    await ensurePendingCheckoutTable();
+    const rows = await prisma.$queryRawUnsafe<Array<{ id: string; data: string }>>(
+      `SELECT "id", "data" FROM "PendingCheckout"
+       WHERE "expiresAt" > NOW() AND "processedAt" IS NULL
+       ORDER BY "createdAt" ASC LIMIT 20;`
+    );
+    return rows.map((row) => ({ id: row.id, data: JSON.parse(row.data) as PendingCheckout }));
+  } catch (error) {
+    console.error('Failed to find stale pending checkouts:', error);
+    return [];
+  }
+}
 
 // Cleanup stale sessions every 30 minutes
 setInterval(() => {
@@ -382,6 +504,11 @@ setInterval(() => {
       pendingCheckouts.delete(key);
     }
   }
+  ensurePendingCheckoutTable().then(() => {
+    prisma.$executeRawUnsafe(`DELETE FROM "PendingCheckout" WHERE "expiresAt" <= NOW();`).catch((error) => {
+      console.error('Failed to purge expired pending checkouts:', error);
+    });
+  }).catch(() => {});
 }, 30 * 60 * 1000);
 
 function normalizePhone(phone: unknown) {
@@ -870,79 +997,150 @@ async function buildVerifiedCheckout(data: any): Promise<PendingCheckout> {
   };
 }
 
-async function createOrderFromCheckout(checkout: PendingCheckout, razorpayPaymentId?: string) {
-  const existingOrder = razorpayPaymentId
-    ? await prisma.order.findFirst({
-        where: { gokwikOrderId: razorpayPaymentId },
-        include: {
-          items: {
-            include: { product: true },
+interface CreateOrderOptions {
+  razorpayOrderId?: string;
+  razorpayPaymentId?: string;
+  gokwikOrderId?: string;
+  paidAmount?: number;
+  codBalance?: number;
+  paymentStatus?: string;
+}
+
+async function createOrderFromCheckout(checkout: PendingCheckout, options: CreateOrderOptions = {}) {
+  await ensureOrderPaymentColumns();
+
+  const {
+    razorpayOrderId,
+    razorpayPaymentId,
+    gokwikOrderId,
+    paidAmount = 0,
+    codBalance = 0,
+    paymentStatus = 'pending',
+  } = options;
+
+  const orderInclude = {
+    items: {
+      include: { product: true },
+    },
+  };
+
+  const findExisting = async () => {
+    if (razorpayOrderId) {
+      const order = await prisma.order.findFirst({ where: { razorpayOrderId }, include: orderInclude });
+      if (order) return order;
+    }
+    if (razorpayPaymentId) {
+      const order = await prisma.order.findFirst({ where: { razorpayPaymentId }, include: orderInclude });
+      if (order) return order;
+    }
+    if (gokwikOrderId) {
+      const order = await prisma.order.findFirst({ where: { gokwikOrderId }, include: orderInclude });
+      if (order) return order;
+    }
+    return null;
+  };
+
+  // Idempotency race guard: if a concurrent request (webhook + browser, or a
+  // double-submit) already created this order, return it untouched. A pending
+  // order that was created during an earlier verification which couldn't
+  // confirm capture is upgraded in place now that we have confirmation — never
+  // double-charging inventory.
+  const existing = await findExisting();
+  if (existing) {
+    if ((options.paymentStatus === 'paid' || options.paymentStatus === 'partial') && existing.paymentStatus === 'pending') {
+      try {
+        const upgraded = await prisma.order.update({
+          where: { id: existing.id },
+          data: {
+            razorpayPaymentId: razorpayPaymentId || existing.razorpayPaymentId,
+            paidAmount: paidAmount > 0 ? paidAmount : existing.paidAmount,
+            codBalance,
+            paymentStatus: options.paymentStatus,
           },
-        },
-      })
-    : null;
-
-  if (existingOrder) {
-    return existingOrder;
-  }
-
-  const createdOrder = await prisma.$transaction(async (tx) => {
-    for (const item of checkout.items) {
-      const updated = await tx.product.updateMany({
-        where: {
-          id: item.productId,
-          inventoryCount: { gte: item.quantity },
-        },
-        data: { inventoryCount: { decrement: item.quantity } },
-      });
-
-      if (updated.count !== 1) {
-        throw new Error('A product in this order is no longer available in the requested quantity.');
+        });
+        const loaded = await prisma.order.findUnique({ where: { id: upgraded.id }, include: orderInclude });
+        return loaded || existing;
+      } catch (upgradeError: any) {
+        if (upgradeError?.code === 'P2002') {
+          const winner = await findExisting();
+          if (winner) return winner;
+        }
+        throw upgradeError;
       }
     }
+    return existing;
+  }
 
-    const displayId = await getNextOrderId();
+  let created;
+  try {
+    created = await prisma.$transaction(async (tx) => {
+      for (const item of checkout.items) {
+        const updated = await tx.product.updateMany({
+          where: {
+            id: item.productId,
+            inventoryCount: { gte: item.quantity },
+          },
+          data: { inventoryCount: { decrement: item.quantity } },
+        });
 
-    return tx.order.create({
-      data: {
-        displayId,
-        gokwikOrderId: razorpayPaymentId || null,
-        customerEmail: checkout.customerEmail,
-        customerPhone: checkout.customerPhone,
-        customerFirstName: checkout.customerFirstName,
-        customerLastName: checkout.customerLastName,
-        addressNickname: checkout.addressNickname,
-        customerAddress: checkout.customerAddress,
-        customerCity: checkout.customerCity,
-        customerState: checkout.customerState,
-        customerZip: checkout.customerZip,
-        subtotal: checkout.subtotal,
-        shipping: checkout.shipping,
-        total: checkout.total,
-        status: 'LIVE',
-        items: {
-          create: checkout.items.map((item) => ({
-            productId: item.productId,
-            quantity: item.quantity,
-            priceAtPurchase: item.price,
-            customImageUrl: item.customImageUrl,
-            customText: item.customText,
-          })),
+        if (updated.count !== 1) {
+          throw new Error('A product in this order is no longer available in the requested quantity.');
+        }
+      }
+
+      const displayId = await getNextOrderId();
+
+      return tx.order.create({
+        data: {
+          displayId,
+          gokwikOrderId: gokwikOrderId || null,
+          razorpayOrderId: razorpayOrderId || null,
+          razorpayPaymentId: razorpayPaymentId || null,
+          paidAmount,
+          codBalance,
+          paymentStatus,
+          customerEmail: checkout.customerEmail,
+          customerPhone: checkout.customerPhone,
+          customerFirstName: checkout.customerFirstName,
+          customerLastName: checkout.customerLastName,
+          addressNickname: checkout.addressNickname,
+          customerAddress: checkout.customerAddress,
+          customerCity: checkout.customerCity,
+          customerState: checkout.customerState,
+          customerZip: checkout.customerZip,
+          subtotal: checkout.subtotal,
+          shipping: checkout.shipping,
+          total: checkout.total,
+          status: 'LIVE',
+          items: {
+            create: checkout.items.map((item) => ({
+              productId: item.productId,
+              quantity: item.quantity,
+              priceAtPurchase: item.price,
+              customImageUrl: item.customImageUrl,
+              customText: item.customText,
+            })),
+          },
         },
-      },
+      });
+    }, {
+      maxWait: 10_000,
+      timeout: 20_000,
     });
-  }, {
-    maxWait: 10_000,
-    timeout: 20_000,
-  });
+  } catch (error: any) {
+    // Unique-constraint violation on razorpayOrderId/razorpayPaymentId/
+    // gokwikOrderId means another request won the race and already created
+    // this order. Return it instead of creating a duplicate.
+    if (error?.code === 'P2002') {
+      const winner = await findExisting();
+      if (winner) return winner;
+    }
+    throw error;
+  }
 
   const order = await prisma.order.findUnique({
-    where: { id: createdOrder.id },
-    include: {
-      items: {
-        include: { product: true },
-      },
-    },
+    where: { id: created.id },
+    include: orderInclude,
   });
 
   if (!order) {
@@ -952,6 +1150,50 @@ async function createOrderFromCheckout(checkout: PendingCheckout, razorpayPaymen
   io.emit("new_order", order);
   io.emit("products_updated");
   return order;
+}
+
+async function verifyPaymentIsCaptured(razorpayOrderId: string, razorpayPaymentId: string): Promise<{ captured: boolean; amountPaise: number; error?: string }> {
+  try {
+    const auth = Buffer.from(`${RAZORPAY_KEY_ID}:${RAZORPAY_KEY_SECRET}`).toString('base64');
+    const res = await fetch(`https://api.razorpay.com/v1/payments/${encodeURIComponent(razorpayPaymentId)}`, {
+      headers: { Authorization: `Basic ${auth}` },
+    });
+    if (!res.ok) {
+      return { captured: false, amountPaise: 0, error: `Razorpay payment lookup failed (${res.status}).` };
+    }
+    const payment = await res.json();
+    const errorMessage = payment.status === 'captured' ? undefined : `Payment status is '${payment.status}', expected 'captured'.`;
+    return {
+      captured: payment.status === 'captured',
+      amountPaise: Number(payment.amount) || 0,
+      ...(errorMessage ? { error: errorMessage } : {}),
+    };
+  } catch (error: any) {
+    return { captured: false, amountPaise: 0, error: `Could not confirm payment capture: ${error.message}` };
+  }
+}
+
+// Deletes an order that was never actually paid (payment failed / abandoned)
+// and restores the inventory units it had reserved at creation time.
+async function deleteOrderAndRestoreInventory(orderId: string) {
+  const order = await prisma.order.findUnique({
+    where: { id: orderId },
+    include: { items: true },
+  });
+  if (!order) return;
+
+  for (const item of order.items) {
+    await prisma.product.updateMany({
+      where: { id: item.productId },
+      data: { inventoryCount: { increment: item.quantity } },
+    });
+  }
+
+  try {
+    await prisma.order.delete({ where: { id: order.id } });
+  } catch (error: any) {
+    if (error?.code !== 'P2025') throw error; // already gone is fine
+  }
 }
 
 // --- GoKwik Auth Middleware ---
@@ -1239,6 +1481,7 @@ app.post('/api/checkout/razorpay-order', rateLimit({ windowMs: 15 * 60 * 1000, m
     }
 
     pendingCheckouts.set(razorpayOrder.id, checkout);
+    await savePendingCheckout(razorpayOrder.id, checkout);
 
     res.json({
       key: RAZORPAY_KEY_ID,
@@ -1277,12 +1520,53 @@ app.post('/api/checkout/verify-razorpay', rateLimit({ windowMs: 15 * 60 * 1000, 
       return res.status(400).json({ error: 'Payment verification failed.' });
     }
 
-    const checkout = pendingCheckouts.get(razorpay_order_id);
+    // The browser callback is trustworthy for *authenticity* (HMAC above),
+    // but not authoritative for *money movement*. Confirm with Razorpay that
+    // the payment was actually captured, and create an admin-visible order:
+    //   - confirmed capture  → order marked paid/partial immediately
+    //   - any verification failure → order created as PENDING so admin can
+    //     see it; the webhook / reconciliation then confirms it (marks paid)
+    //     or, if the payment truly failed, deletes it.
+    const checkout = await getPendingCheckout(razorpay_order_id);
     if (!checkout) {
       return res.status(404).json({ error: 'Checkout session expired. Please try again.' });
     }
 
-    const order = await createOrderFromCheckout(checkout, razorpay_payment_id);
+    const capture = await verifyPaymentIsCaptured(razorpay_order_id, razorpay_payment_id);
+    const payNowAmount = payoutAmountFor(checkout);
+    const expectedAmountPaise = Math.round(payNowAmount * 100);
+    const confirmed = capture.captured && capture.amountPaise === expectedAmountPaise;
+
+    if (!confirmed) {
+      console.warn('Payment not confirmed yet; creating PENDING order:', {
+        razorpay_order_id,
+        razorpay_payment_id,
+        error: capture.error || 'amount mismatch',
+      });
+      const pendingOrder = await createOrderFromCheckout(checkout, {
+        razorpayOrderId: razorpay_order_id,
+        razorpayPaymentId: razorpay_payment_id,
+        paymentStatus: 'pending',
+      });
+      // Keep the pending checkout so the webhook / reconciliation can still
+      // upgrade or clean up this order. The customer already paid on Razorpay,
+      // so the frontend shows the success screen regardless.
+      return res.status(201).json({
+        order: pendingOrder,
+        paidNow: 0,
+        codBalance: 0,
+        pending: true,
+      });
+    }
+
+    const paidAmount = payoutAmountFor(checkout);
+    const order = await createOrderFromCheckout(checkout, {
+      razorpayOrderId: razorpay_order_id,
+      razorpayPaymentId: razorpay_payment_id,
+      paidAmount,
+      codBalance: Math.max(0, checkout.total - paidAmount),
+      paymentStatus: checkout.paymentMethod === 'prepaid' ? 'paid' : 'partial',
+    });
     if (checkout.saveAddress) {
       try {
         await saveAccountAddress({
@@ -1300,18 +1584,252 @@ app.post('/api/checkout/verify-razorpay', rateLimit({ windowMs: 15 * 60 * 1000, 
         console.error('Order placed, but failed to save checkout address:', addressError);
       }
     }
-    pendingCheckouts.delete(razorpay_order_id);
+    await deletePendingCheckout(razorpay_order_id);
 
     res.status(201).json({
       order,
-      paidNow: checkout.paymentMethod === 'prepaid' ? checkout.total : CHECKOUT_DEPOSIT_AMOUNT,
-      codBalance: checkout.paymentMethod === 'prepaid' ? 0 : Math.max(0, checkout.total - CHECKOUT_DEPOSIT_AMOUNT),
+      paidNow: paidAmount,
+      codBalance: Math.max(0, checkout.total - paidAmount),
+      pending: false,
     });
   } catch (error: any) {
     console.error('Failed to verify Razorpay payment:', error);
     res.status(500).json({ error: error.message || 'Failed to place order.' });
   }
 });
+
+// --- Razorpay Webhook ---
+// Authoritative recovery path. If the customer pays but the browser callback
+// never reaches us (tab closed, network drop, crash), the webhook still lets
+// us create the order. Idempotent with the frontend verify path via the
+// unique razorpayOrderId/razorpayPaymentId indexes.
+app.post('/api/webhooks/razorpay',
+  async (req: Request, res: Response) => {
+    const rawBody = (req as any).rawWebhookBody as Buffer | undefined;
+    if (!rawBody || rawBody.length === 0) return res.status(400).json({ error: 'Empty webhook body.' });
+
+    if (!RAZORPAY_WEBHOOK_SECRET) {
+      // Webhook not configured in the dashboard → nothing to verify securely.
+      console.warn('Razorpay webhook received, but RAZORPAY_WEBHOOK_SECRET is not set. Ignoring.');
+      return res.status(200).json({ received: true, skipped: true });
+    }
+
+    const signature = req.headers['x-razorpay-signature'] as string | undefined;
+    if (!signature) return res.status(400).json({ error: 'Missing signature.' });
+
+    const expected = crypto.createHmac('sha256', RAZORPAY_WEBHOOK_SECRET).update(rawBody).digest('hex');
+    const received = Buffer.from(String(signature), 'hex');
+    const computed = Buffer.from(expected, 'hex');
+    if (!crypto.timingSafeEqual(received, computed)) {
+      return res.status(400).json({ error: 'Webhook signature mismatch.' });
+    }
+
+    try {
+      const payload = JSON.parse(rawBody.toString('utf8'));
+      const event = payload.event as string;
+      const entity = payload.payload?.payment?.entity;
+
+      if (event === 'payment.captured' && entity?.order_id && entity?.id) {
+        const razorpayOrderId = String(entity.order_id);
+        const razorpayPaymentId = String(entity.id);
+        const capturedAmountPaise = Number(entity.amount) || 0;
+
+        const checkout = await getPendingCheckout(razorpayOrderId);
+        if (checkout) {
+          const payNowAmount = payoutAmountFor(checkout);
+          if (capturedAmountPaise === Math.round(payNowAmount * 100)) {
+            try {
+              const order = await createOrderFromCheckout(checkout, {
+                razorpayOrderId,
+                razorpayPaymentId,
+                paidAmount: payNowAmount,
+                codBalance: Math.max(0, checkout.total - payNowAmount),
+                paymentStatus: checkout.paymentMethod === 'prepaid' ? 'paid' : 'partial',
+              });
+              console.log('Webhook created/confirmed order:', { orderId: order.id, razorpayOrderId, razorpayPaymentId });
+              await deletePendingCheckout(razorpayOrderId);
+            } catch (error: any) {
+              console.error('Webhook failed to create order:', error);
+            }
+          } else {
+            console.error('Webhook amount mismatch; leaving pending for reconciliation:', {
+              razorpayOrderId,
+              capturedAmountPaise,
+              expectedAmountPaise: Math.round(payNowAmount * 100),
+            });
+          }
+        } else {
+          // No pending checkout (already consumed), but a PENDING order may
+          // exist from a verify that couldn't confirm capture. Upgrade it.
+          const pendingOrder = await prisma.order.findFirst({
+            where: { razorpayOrderId, paymentStatus: 'pending' },
+          });
+          if (pendingOrder) {
+            const totalPaise = Math.round(pendingOrder.total * 100);
+            const depositPaise = Math.round(Math.min(CHECKOUT_DEPOSIT_AMOUNT, pendingOrder.total) * 100);
+            if (capturedAmountPaise === totalPaise) {
+              await prisma.order.update({
+                where: { id: pendingOrder.id },
+                data: {
+                  razorpayPaymentId,
+                  paidAmount: pendingOrder.total,
+                  codBalance: 0,
+                  paymentStatus: 'paid',
+                },
+              });
+              console.log('Webhook upgraded pending order to paid:', pendingOrder.id);
+            } else if (capturedAmountPaise === depositPaise) {
+              await prisma.order.update({
+                where: { id: pendingOrder.id },
+                data: {
+                  razorpayPaymentId,
+                  paidAmount: Math.min(CHECKOUT_DEPOSIT_AMOUNT, pendingOrder.total),
+                  codBalance: Math.max(0, pendingOrder.total - Math.min(CHECKOUT_DEPOSIT_AMOUNT, pendingOrder.total)),
+                  paymentStatus: 'partial',
+                },
+              });
+              console.log('Webhook upgraded pending order to partial:', pendingOrder.id);
+            }
+          } else {
+            console.log('Webhook for order with no pending state; likely already handled:', razorpayOrderId);
+          }
+        }
+      } else if (event === 'payment.failed' && entity?.order_id) {
+        // The payment never went through — remove the pending checkout and any
+        // PENDING order the verify path may have created for it, restoring
+        // inventory.
+        const razorpayOrderId = String(entity.order_id);
+        await deletePendingCheckout(razorpayOrderId);
+        const failedPendingOrders = await prisma.order.findMany({
+          where: { razorpayOrderId, paymentStatus: 'pending' },
+        });
+        for (const failedOrder of failedPendingOrders) {
+          await deleteOrderAndRestoreInventory(failedOrder.id);
+          console.log('Webhook deleted pending order for failed payment:', failedOrder.id);
+        }
+      }
+
+      res.status(200).json({ received: true });
+    } catch (error: any) {
+      console.error('Failed to process Razorpay webhook:', error);
+      res.status(500).json({ error: 'Failed to process webhook.' });
+    }
+  }
+);
+
+async function getRazorpayOrderPayments(orderId: string): Promise<Array<{ id: string; status: string; amount: number }>> {
+  try {
+    const auth = Buffer.from(`${RAZORPAY_KEY_ID}:${RAZORPAY_KEY_SECRET}`).toString('base64');
+    const res = await fetch(`https://api.razorpay.com/v1/orders/${encodeURIComponent(orderId)}/payments`, {
+      headers: { Authorization: `Basic ${auth}` },
+    });
+    if (!res.ok) return [];
+    const data = await res.json();
+    return Array.isArray(data.items) ? data.items : [];
+  } catch (error) {
+    console.error('Failed to list Razorpay order payments:', error);
+    return [];
+  }
+}
+
+const RECONCILE_INTERVAL_MS = Number(process.env.RECONCILE_INTERVAL_MS) || 5 * 60 * 1000;
+const RECONCILE_STALE_MS = Number(process.env.RECONCILE_STALE_MS) || 10 * 60 * 1000;
+
+// Payment reconciliation: periodically find persisted checkouts whose browser
+// callback never arrived and confirm directly with Razorpay whether the money
+// moved. If it did, create the order. Also confirm/clean up PENDING orders
+// (created by a verification that couldn't confirm capture). Catches crashes,
+// lost webhooks, and dropped callbacks without manual intervention.
+async function reconcilePaidPayments() {
+  if (!RAZORPAY_KEY_ID || !RAZORPAY_KEY_SECRET) return;
+
+  const stale = await findStalePendingCheckouts();
+  for (const { id, data } of stale) {
+    const ageMs = Date.now() - data.createdAt;
+    if (ageMs < RECONCILE_STALE_MS) continue; // give the browser callback a window first
+
+    const payments = await getRazorpayOrderPayments(id);
+    const captured = payments.find((payment) => payment.status === 'captured');
+    if (captured) {
+      const payNowAmount = payoutAmountFor(data);
+      if (Number(captured.amount) === Math.round(payNowAmount * 100)) {
+        try {
+          const order = await createOrderFromCheckout(data, {
+            razorpayOrderId: id,
+            razorpayPaymentId: String(captured.id),
+            paidAmount: payNowAmount,
+            codBalance: Math.max(0, data.total - payNowAmount),
+            paymentStatus: data.paymentMethod === 'prepaid' ? 'paid' : 'partial',
+          });
+          console.log('Reconciliation recovered order:', { orderId: order.id, razorpayOrderId: id });
+          await deletePendingCheckout(id);
+        } catch (error: any) {
+          console.error('Reconciliation failed to create order:', error);
+        }
+      }
+    } else {
+      await deletePendingCheckout(id);
+    }
+  }
+
+  // Confirm or clean up PENDING orders whose payment can't be verified in the
+  // grace window. These exist when the browser verify call reached us but the
+  // real-time capture lookup failed (or Razorpay was still processing).
+  const pendingOrders = await prisma.order.findMany({
+    where: { paymentStatus: 'pending', razorpayOrderId: { not: null } },
+    include: { items: true },
+    orderBy: { createdAt: 'asc' },
+  });
+
+  for (const order of pendingOrders) {
+    const ageMs = Date.now() - new Date(order.createdAt).getTime();
+    if (ageMs < RECONCILE_STALE_MS) continue;
+
+    const razorpayOrderId = order.razorpayOrderId!;
+    const payments = await getRazorpayOrderPayments(razorpayOrderId);
+    const captured = payments.find((payment) => payment.status === 'captured');
+
+    if (captured) {
+      const amountPaise = Number(captured.amount);
+      const totalPaise = Math.round(order.total * 100);
+      const depositPaise = Math.round(Math.min(CHECKOUT_DEPOSIT_AMOUNT, order.total) * 100);
+
+      if (amountPaise === totalPaise) {
+        await prisma.order.update({
+          where: { id: order.id },
+          data: {
+            razorpayPaymentId: String(captured.id),
+            paidAmount: order.total,
+            codBalance: 0,
+            paymentStatus: 'paid',
+          },
+        });
+      } else if (amountPaise === depositPaise) {
+        await prisma.order.update({
+          where: { id: order.id },
+          data: {
+            razorpayPaymentId: String(captured.id),
+            paidAmount: Math.min(CHECKOUT_DEPOSIT_AMOUNT, order.total),
+            codBalance: Math.max(0, order.total - Math.min(CHECKOUT_DEPOSIT_AMOUNT, order.total)),
+            paymentStatus: 'partial',
+          },
+        });
+      } else {
+        continue; // unusual amount — leave pending for manual review
+      }
+      await deletePendingCheckout(razorpayOrderId);
+      continue;
+    }
+
+    // No captured payment after the grace window: the payment failed or was
+    // abandoned. The user asked for no order to remain in that case.
+    await deleteOrderAndRestoreInventory(order.id);
+    await deletePendingCheckout(razorpayOrderId);
+    console.log('Reconciliation deleted pending order (no captured payment):', order.id);
+  }
+}
+setInterval(reconcilePaidPayments, RECONCILE_INTERVAL_MS);
+reconcilePaidPayments().catch(() => {});
 
 // --- GoKwik Cart API Endpoints ---
 // GoKwik servers call these endpoints to interact with our store.
@@ -1470,10 +1988,12 @@ app.post('/gokwik/v1/cart/place-order', gokwikAuthMiddleware, async (req, res) =
       return res.status(400).json({ message: 'Order total does not match the verified cart total' });
     }
 
-    const newOrder = await createOrderFromCheckout(
-      checkout,
-      String(req.body.gokwik_order_id || transactionId || `gk_${Date.now()}`)
-    );
+    const newOrder = await createOrderFromCheckout(checkout, {
+      gokwikOrderId: String(req.body.gokwik_order_id || transactionId || `gk_${Date.now()}`),
+      paidAmount: checkout.paymentMethod === 'prepaid' ? checkout.total : payoutAmountFor(checkout),
+      codBalance: Math.max(0, checkout.total - payoutAmountFor(checkout)),
+      paymentStatus: checkout.paymentMethod === 'prepaid' ? 'paid' : 'partial',
+    });
 
     // Clean up session
     cartSessions.delete(sessionKey);
@@ -1860,7 +2380,8 @@ app.delete('/api/orders/:id', requireAdmin, async (req, res) => {
 
 // --- Admin Dashboard Stats ---
 
-app.post('/api/admin/login', rateLimit({ windowMs: 15 * 60 * 1000, max: 8, keyPrefix: 'admin-login' }), async (req, res) => {
+const ADMIN_LOGIN_RATE_MAX = Number(process.env.ADMIN_LOGIN_RATE_MAX) || 8;
+app.post('/api/admin/login', rateLimit({ windowMs: 15 * 60 * 1000, max: ADMIN_LOGIN_RATE_MAX, keyPrefix: 'admin-login' }), async (req, res) => {
   const password = req.body?.password;
   if (!process.env.ADMIN_PASSWORD_HASH) {
     res.status(503).json({ error: 'Admin access is not configured.' });
@@ -1921,8 +2442,28 @@ app.get('/api/admin/revenue-chart', requireAdmin, async (_req, res) => {
   }
 });
 
+app.get('/api/admin/orders', requireAdmin, async (_req, res) => {
+  try {
+    const orders = await prisma.order.findMany({
+      include: {
+        items: {
+          include: { product: true },
+        },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+    res.json(orders);
+  } catch (error) {
+    console.error('Failed to fetch admin orders:', error);
+    res.status(500).json({ error: 'Failed to fetch admin orders' });
+  }
+});
+
 // Start Server
 httpServer.listen(port, () => {
   console.log(`Backend server running on port ${port} with Socket.IO enabled`);
   console.log(`GoKwik environment: ${process.env.GOKWIK_ENV || 'not set'}`);
+  // Ensure the payment columns exist on the shared DB before admin reads hit them.
+  ensureOrderPaymentColumns().catch(() => {});
+  ensurePendingCheckoutTable().catch(() => {});
 });

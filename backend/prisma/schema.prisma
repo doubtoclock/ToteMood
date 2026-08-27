@@ -28,6 +28,11 @@ model Order {
   id                String      @id @default(cuid())
   displayId         String      @unique
   gokwikOrderId     String?
+  razorpayOrderId   String?     @unique
+  razorpayPaymentId String?     @unique
+  paidAmount        Float       @default(0)
+  codBalance        Float       @default(0)
+  paymentStatus     String      @default("pending")
   customerEmail     String
   customerPhone     String
   customerFirstName String
@@ -44,6 +49,16 @@ model Order {
   createdAt         DateTime    @default(now())
   updatedAt         DateTime    @updatedAt
   items             OrderItem[]
+}
+
+model PendingCheckout {
+  id          String    @id
+  data        String
+  createdAt   DateTime  @default(now())
+  expiresAt   DateTime
+  processedAt DateTime?
+
+  @@index([createdAt])
 }
 
 model OrderItem {
