@@ -136,8 +136,10 @@ function buildCsv(orders: Order[]): string {
     "Customer",
     "Email",
     "Phone",
+    "Address",
     "City",
     "State",
+    "Zip",
     "Payment",
     "Paid (INR)",
     "Balance (INR)",
@@ -150,7 +152,9 @@ function buildCsv(orders: Order[]): string {
     "Created (IST)",
   ].join(",");
 
-  const rows = orders.map((order) => {
+  const sorted = [...orders].sort((a, b) => Number(a.displayId) - Number(b.displayId));
+
+  const rows = sorted.map((order) => {
     const parts = toISTParts(order.createdAt);
     const items = order.items
       .map((item) => `${item.product?.name || item.productId} x${item.quantity}`)
@@ -161,8 +165,10 @@ function buildCsv(orders: Order[]): string {
       escapeCsv(`${order.customerFirstName} ${order.customerLastName}`.trim()),
       escapeCsv(order.customerEmail),
       escapeCsv(order.customerPhone),
+      escapeCsv(order.customerAddress),
       escapeCsv(order.customerCity),
       escapeCsv(order.customerState),
+      escapeCsv(order.customerZip),
       escapeCsv(paymentLabel(order.paymentStatus).label),
       currency(order.paidAmount),
       currency(order.codBalance),
