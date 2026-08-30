@@ -56,11 +56,42 @@ const noyh = localFont({
   display: "swap",
 });
 
+const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "https://www.totemood.com";
+const previewImages = [
+  {
+    url: "/images/t1.jpeg",
+    width: 1360,
+    height: 1600,
+    alt: "Totemood illustrated tote bag preview",
+  },
+  {
+    url: "/images/t2.jpeg",
+    width: 1080,
+    height: 1271,
+    alt: "Totemood custom tote bag preview",
+  },
+];
+
 export const metadata: Metadata = {
+  metadataBase: new URL(siteUrl),
   title: "Totemood | Premium Illustrated Totes",
   description: "Editorial, warm, and minimal premium tote bags.",
   icons: {
     icon: "/images/logo.png",
+  },
+  openGraph: {
+    title: "Totemood | Premium Illustrated Totes",
+    description: "Editorial, warm, and minimal premium tote bags.",
+    url: siteUrl,
+    siteName: "Totemood",
+    images: previewImages,
+    type: "website",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "Totemood | Premium Illustrated Totes",
+    description: "Editorial, warm, and minimal premium tote bags.",
+    images: previewImages.map((image) => image.url),
   },
 };
 
