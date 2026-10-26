@@ -16,6 +16,7 @@ const labelText = (label?: Product["label"]) => {
 };
 const customizationText = (category: string) => {
   if (category === "image+text") return "Add your image and text during checkout.";
+  if (category === "text") return "Add your text during checkout.";
   if (category === "image") return "Add your image during checkout.";
   return "No checkout customization required.";
 };
@@ -149,9 +150,7 @@ export function ProductTop({ product }: { product: Product }) {
 
             {/* Ratings */}
             {(() => {
-              const reviewCount = product.reviews && product.reviews > 0 
-                ? product.reviews 
-                : ((product.id.split("").reduce((acc, char) => acc + char.charCodeAt(0), 0) % 90) + 135);
+              const reviewCount = Math.max(0, Math.floor(product.reviews ?? 0));
               const rating = product.rating && product.rating >= 4 ? product.rating : 4.9;
               return (
                 <div className="flex items-center gap-2 mb-8">

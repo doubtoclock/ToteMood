@@ -6,14 +6,14 @@ import { waitForHydration } from "./utils";
  * avoiding the transient duplicate-tree window that breaks strict locators.
  */
 export const test = base.extend({
-  page: async ({ page }, use) => {
+  page: async ({ page }, runFixture) => {
     const originalGoto = page.goto.bind(page);
     page.goto = async (...args: Parameters<typeof page.goto>) => {
       const result = await originalGoto(...args);
       await waitForHydration(page).catch(() => {});
       return result;
     };
-    await use(page);
+    await runFixture(page);
   },
 });
 

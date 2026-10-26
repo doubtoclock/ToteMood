@@ -2,10 +2,11 @@
 
 import { useCallback, useState, useEffect, useRef } from "react";
 import Image from "next/image";
-import { Plus, Edit2, Trash2, X, Upload, ImageIcon } from "lucide-react";
+import { Plus, Edit2, Trash2, X, Upload, ImageIcon, Loader2 } from "lucide-react";
 import { apiFetch, ENABLE_REALTIME, SOCKET_URL } from "@/lib/api";
 import { io } from "socket.io-client";
 import { compressImageForUpload } from "@/lib/imageCompression";
+import { useCategories } from "@/lib/useCategories";
 
 interface AdminProduct {
   id: string;
@@ -19,6 +20,21 @@ interface AdminProduct {
   label: "bestseller" | "new" | "premium";
   category: string;
   inventoryCount: number;
+  reviews: number;
+  categoryIds?: string[];
+}
+
+interface Pagination {
+  page: number;
+  totalPages: number;
+  total: number;
+  hasNextPage: boolean;
+  hasPreviousPage: boolean;
+}
+
+interface ProductListResponse {
+  items: AdminProduct[];
+  pagination: Pagination;
 }
 
 const MAX_GALLERY_IMAGES = 8;
@@ -35,7 +51,7 @@ const normalizeAdminLabel = (product: AdminProduct): AdminProduct["label"] => {
 
 const normalizeAdminCategory = (product: AdminProduct) => {
   const value = String(product.category || "").trim().toLowerCase().replace(/\s*\+\s*/g, "+");
-  if (value === "image" || value === "image+text" || value === "no customization") return value;
+  if (value === "image" || value === "text" || value === "image+text" || value === "no customization") return value;
   if (!product.isCustomizable) return "no customization";
 
   const searchable = `${product.id} ${product.name} ${product.description}`.toLowerCase();
@@ -43,8 +59,11 @@ const normalizeAdminCategory = (product: AdminProduct) => {
 };
 
 export default function AdminProducts() {
+  const { categories, loading: categoriesLoading } = useCategories();
   const [products, setProducts] = useState<AdminProduct[]>([]);
   const [loading, setLoading] = useState(true);
+  const [page, setPage] = useState(1);
+  const [pagination, setPagination] = useState<Pagination | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingProduct, setEditingProduct] = useState<AdminProduct | null>(null);
 
@@ -56,9 +75,11 @@ export default function AdminProducts() {
   const [label, setLabel] = useState<AdminProduct["label"]>("new");
   const [category, setCategory] = useState("image");
   const [inventoryCount, setInventoryCount] = useState("0");
+  const [reviews, setReviews] = useState("0");
   const [image, setImage] = useState("");
   const [imagePreview, setImagePreview] = useState("");
   const [gallery, setGallery] = useState<string[]>([]);
+  const [selectedCategoryIds, setSelectedCategoryIds] = useState<string[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isDragOver, setIsDragOver] = useState(false);
   const [isGalleryUploading, setIsGalleryUploading] = useState(false);
@@ -66,16 +87,18 @@ export default function AdminProducts() {
   const galleryFileInputRef = useRef<HTMLInputElement>(null);
 
   const fetchProducts = useCallback(() => {
-    apiFetch<AdminProduct[]>('/api/products')
+    setLoading(true);
+    apiFetch<ProductListResponse>(`/api/admin/products?page=${page}&pageSize=24`)
       .then(data => {
-        setProducts(data);
+        setProducts(data.items);
+        setPagination(data.pagination);
         setLoading(false);
       })
       .catch(err => {
         console.error(err);
         setLoading(false);
       });
-  }, []);
+  }, [page]);
 
   useEffect(() => {
     void Promise.resolve().then(fetchProducts);
@@ -191,9 +214,11 @@ export default function AdminProducts() {
     setLabel("new");
     setCategory("image");
     setInventoryCount("0");
+    setReviews("0");
     setImage("");
     setImagePreview("");
     setGallery([]);
+    setSelectedCategoryIds([]);
     setIsModalOpen(true);
   };
 
@@ -206,9 +231,11 @@ export default function AdminProducts() {
     setLabel(normalizeAdminLabel(product));
     setCategory(normalizeAdminCategory(product));
     setInventoryCount(product.inventoryCount.toString());
+    setReviews(String(product.reviews ?? 0));
     setImage(product.image);
     setImagePreview(product.image);
     setGallery(product.gallery && product.gallery.length > 0 ? product.gallery : [product.image].filter(Boolean));
+    setSelectedCategoryIds(product.categoryIds || []);
     setIsModalOpen(true);
   };
 
@@ -218,7 +245,7 @@ export default function AdminProducts() {
       await apiFetch(`/api/products/${id}`, {
         method: 'DELETE'
       });
-      fetchProducts();
+      setProducts((current) => current.filter((product) => product.id !== id));
     } catch (err) {
       console.error(err);
       alert("Cannot delete product: it may be tied to existing orders.");
@@ -238,9 +265,11 @@ export default function AdminProducts() {
       label,
       category,
       inventoryCount: parseInt(inventoryCount, 10),
+      reviews: parseInt(reviews || "0", 10),
       isCustomizable: category !== "no customization",
       image: coverImage,
-      gallery: [coverImage, ...gallery.filter((item) => item !== coverImage)]
+      gallery: [coverImage, ...gallery.filter((item) => item !== coverImage)],
+      categoryIds: selectedCategoryIds,
     };
 
     if (payload.gallery.length > MAX_GALLERY_IMAGES) {
@@ -262,12 +291,17 @@ export default function AdminProducts() {
         ? `/api/products/${editingProduct.id}`
         : '/api/products';
       
-      await apiFetch(url, {
+      const saved = await apiFetch<AdminProduct>(url, {
         method: editingProduct ? 'PUT' : 'POST',
         body: JSON.stringify(payload)
       });
       setIsModalOpen(false);
-      fetchProducts();
+      if (editingProduct) {
+        setProducts((current) => current.map((product) => product.id === saved.id ? saved : product));
+      } else {
+        if (page === 1) setProducts((current) => [saved, ...current].slice(0, 24));
+        else setPage(1);
+      }
     } catch (error) {
       alert(error instanceof Error ? error.message : "Failed to save product. Please try again.");
     } finally {
@@ -276,7 +310,7 @@ export default function AdminProducts() {
   };
 
   if (loading) {
-    return <div className="p-8 text-[#5A5A55]">Loading products...</div>;
+    return <div className="flex min-h-[320px] flex-col items-center justify-center gap-3 text-[#5A5A55]"><Loader2 className="h-8 w-8 animate-spin text-[#757D5C]" /><p className="text-sm font-medium">Loading products…</p></div>;
   }
 
   return (
@@ -301,6 +335,7 @@ export default function AdminProducts() {
               <th className="p-4 text-xs font-bold uppercase tracking-wider text-[#5A5A55]">Product</th>
               <th className="p-4 text-xs font-bold uppercase tracking-wider text-[#5A5A55]">Price</th>
               <th className="p-4 text-xs font-bold uppercase tracking-wider text-[#5A5A55]">Inventory</th>
+              <th className="p-4 text-xs font-bold uppercase tracking-wider text-[#5A5A55]">Reviews</th>
               <th className="p-4 text-xs font-bold uppercase tracking-wider text-[#5A5A55]">Customizable</th>
               <th className="p-4 text-xs font-bold uppercase tracking-wider text-[#5A5A55] text-right">Actions</th>
             </tr>
@@ -336,6 +371,7 @@ export default function AdminProducts() {
                     {product.inventoryCount} in stock
                   </span>
                 </td>
+                <td className="p-4 text-sm font-medium text-[#1C1C1A]">{product.reviews ?? 0}</td>
                 <td className="p-4">
                   <span className={`px-2 py-1 rounded text-xs font-bold ${
                     product.category !== "no customization" ? 'bg-[#757D5C]/20 text-[#757D5C]' : 'bg-gray-100 text-gray-600'
@@ -363,7 +399,7 @@ export default function AdminProducts() {
             ))}
             {products.length === 0 && (
               <tr>
-                <td colSpan={5} className="p-8 text-center text-[#5A5A55]">
+                <td colSpan={6} className="p-8 text-center text-[#5A5A55]">
                   No products found.
                 </td>
               </tr>
@@ -371,6 +407,13 @@ export default function AdminProducts() {
           </tbody>
         </table>
       </div>
+      {pagination && pagination.totalPages > 1 && (
+        <nav aria-label="Admin product pages" className="flex items-center justify-center gap-3">
+          <button type="button" disabled={!pagination.hasPreviousPage} onClick={() => setPage((current) => Math.max(1, current - 1))} className="rounded-xl border border-[#1C1C1A]/20 px-4 py-2 text-sm font-bold disabled:cursor-not-allowed disabled:opacity-40">Previous</button>
+          <span className="text-sm text-[#5A5A55]">Page {pagination.page} of {pagination.totalPages} · {pagination.total} products</span>
+          <button type="button" disabled={!pagination.hasNextPage} onClick={() => setPage((current) => current + 1)} className="rounded-xl bg-[#1C1C1A] px-4 py-2 text-sm font-bold text-white disabled:cursor-not-allowed disabled:opacity-40">Next</button>
+        </nav>
+      )}
 
       {/* Add/Edit Modal */}
       {isModalOpen && (
@@ -405,7 +448,7 @@ export default function AdminProducts() {
                     </select>
                   </div>
                   <div>
-                    <label className="text-xs font-bold uppercase tracking-widest text-[#5A5A55] block mb-2">Category</label>
+                    <label className="text-xs font-bold uppercase tracking-widest text-[#5A5A55] block mb-2">Customization</label>
                     <select
                       required
                       value={category}
@@ -413,6 +456,7 @@ export default function AdminProducts() {
                       className="w-full bg-white border border-[#1C1C1A]/20 rounded-xl px-4 py-3 text-[#1C1C1A] text-sm focus:outline-none focus:border-[#757D5C] cursor-pointer"
                     >
                       <option value="image">Image</option>
+                      <option value="text">Text</option>
                       <option value="image+text">Image + Text</option>
                       <option value="no customization">No Customization</option>
                     </select>
@@ -432,6 +476,20 @@ export default function AdminProducts() {
                       <label className="text-xs font-bold uppercase tracking-widest text-[#5A5A55] block mb-2">Inventory</label>
                       <input type="number" required value={inventoryCount} onChange={e => setInventoryCount(e.target.value)} className="w-full bg-white border border-[#1C1C1A]/20 rounded-xl px-4 py-3 text-[#1C1C1A] text-sm focus:outline-none focus:border-[#757D5C]" />
                     </div>
+                    <div className="flex-1">
+                      <label className="text-xs font-bold uppercase tracking-widest text-[#5A5A55] block mb-2">Review count</label>
+                      <input type="number" min="0" step="1" required value={reviews} onChange={e => setReviews(e.target.value)} className="w-full bg-white border border-[#1C1C1A]/20 rounded-xl px-4 py-3 text-[#1C1C1A] text-sm focus:outline-none focus:border-[#757D5C]" />
+                    </div>
+                  </div>
+                  <div>
+                    <label className="text-xs font-bold uppercase tracking-widest text-[#5A5A55] block mb-2">Collections</label>
+                    <div className="max-h-40 overflow-y-auto rounded-xl border border-[#1C1C1A]/20 bg-white p-2">
+                      {categoriesLoading ? <p className="flex items-center gap-2 px-2 py-2 text-xs text-[#5A5A55]"><Loader2 className="h-3.5 w-3.5 animate-spin" /> Loading collections…</p> : categories.length === 0 ? <p className="px-2 py-2 text-xs text-[#5A5A55]">No collections yet. Create one in Collections.</p> : categories.map((storeCategory) => {
+                        const selected = selectedCategoryIds.includes(storeCategory.id);
+                        return <label key={storeCategory.id} className="flex cursor-pointer items-center gap-2 rounded-lg px-2 py-2 text-sm text-[#1C1C1A] hover:bg-[#F8F6EF]"><input type="checkbox" checked={selected} onChange={() => setSelectedCategoryIds((current) => selected ? current.filter((id) => id !== storeCategory.id) : [...current, storeCategory.id])} className="h-4 w-4 accent-[#757D5C]" />{storeCategory.name}</label>;
+                      })}
+                    </div>
+                    <p className="mt-1 text-xs text-[#8C867C]">Assign this product to one or more collections created in the Collections area.</p>
                   </div>
                 </div>
 
@@ -547,8 +605,8 @@ export default function AdminProducts() {
                 <button type="button" onClick={() => setIsModalOpen(false)} className="px-6 py-3 rounded-full text-sm font-bold uppercase tracking-widest text-[#5A5A55] hover:bg-[#F8F6EF] transition-colors">
                   Cancel
                 </button>
-                <button type="submit" disabled={isSubmitting} className="bg-[#757D5C] text-white px-8 py-3 rounded-full text-sm font-bold uppercase tracking-widest hover:bg-[#5C6348] transition-colors disabled:opacity-50">
-                  {isSubmitting ? "Saving..." : "Save Product"}
+                <button type="submit" disabled={isSubmitting} className="inline-flex items-center bg-[#757D5C] text-white px-8 py-3 rounded-full text-sm font-bold uppercase tracking-widest hover:bg-[#5C6348] transition-colors disabled:opacity-50">
+                  {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}{isSubmitting ? "Saving..." : "Save Product"}
                 </button>
               </div>
             </form>

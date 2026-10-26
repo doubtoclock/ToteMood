@@ -23,8 +23,9 @@ export function isMobileViewport(page: import("@playwright/test").Page): boolean
 
 // Backend the deployment-under-test talks to. When testing the production
 // site, seed logins must go to the production backend or tokens won't verify.
-export const TEST_API_BASE =
-  process.env.PLAYWRIGHT_API_URL ||
-  (process.env.PLAYWRIGHT_BASE_URL || "").includes("totemood.com")
+const testBaseUrl = process.env.PLAYWRIGHT_BASE_URL || "";
+export const TEST_API_BASE = process.env.PLAYWRIGHT_API_URL || (
+  testBaseUrl.includes("totemood.com") || testBaseUrl.includes("mywire.org")
     ? "https://totewood-backend.onrender.com"
-    : "http://localhost:4010";
+    : "http://localhost:4010"
+);

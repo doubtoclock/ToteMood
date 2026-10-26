@@ -31,7 +31,8 @@ export function MomentsWeCarry() {
   const [webglOk, setWebglOk] = useState(false);
 
   useEffect(() => {
-    setWebglOk(isWebGLAvailable());
+    const timer = window.setTimeout(() => setWebglOk(isWebGLAvailable()), 0);
+    return () => window.clearTimeout(timer);
   }, []);
 
   const { scrollYProgress } = useScroll({
@@ -60,8 +61,6 @@ export function MomentsWeCarry() {
   );
   const headerOpacity = useTransform(scrollYProgress, [0.15, 0.25], [0, 1]);
   const headerY = useTransform(scrollYProgress, [0.15, 0.25], ["20px", "0px"]);
-  const textOpacity = useTransform(scrollYProgress, [0.2, 0.3], [0, 1]);
-  const textY = useTransform(scrollYProgress, [0.2, 0.3], ["20px", "0px"]);
   const scrollCueOpacity = useTransform(scrollYProgress, [0, 0.15], [1, 0], { clamp: true });
 
   // 20-45%: Mask reveal (Original -> Illustration)

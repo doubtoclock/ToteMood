@@ -12,6 +12,8 @@ export interface Product {
   category: string;
   rating: number;
   reviews: number;
+  categories?: Array<{ id: string; name: string; slug: string; coverImage: string }>;
+  categoryIds?: string[];
 }
 
 export const products: Product[] = [

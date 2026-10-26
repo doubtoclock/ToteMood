@@ -46,7 +46,7 @@ export function ShopHero() {
                 href="#categories"
                 className="bg-white text-[#1C1C1A] border border-[#1C1C1A]/10 px-8 py-4 rounded-full font-medium tracking-wide hover:bg-[#F8F6EF] transition-colors duration-300 shadow-sm"
               >
-                Explore Categories
+                Explore Collections
               </Link>
             </div>
           </div>

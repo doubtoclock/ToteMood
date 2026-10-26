@@ -2,9 +2,7 @@
 
 import React, { useRef, useState, useEffect } from "react";
 import { motion, useScroll, useTransform } from "framer-motion";
-import { Button } from "@/components/ui/button";
 import { Container } from "@/components/layout/Container";
-import Link from "next/link";
 import { ToteCanvas } from "./ToteCanvas";
 import { AmbientGlow } from "@/components/ui/AmbientGlow";
 import { ChevronLeft, ChevronRight } from "lucide-react";
@@ -29,7 +27,8 @@ export function Hero() {
   const [webglOk, setWebglOk] = useState(false);
 
   useEffect(() => {
-    setWebglOk(isWebGLAvailable());
+    const timer = window.setTimeout(() => setWebglOk(isWebGLAvailable()), 0);
+    return () => window.clearTimeout(timer);
   }, []);
 
   const { scrollYProgress } = useScroll({

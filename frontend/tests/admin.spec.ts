@@ -2,7 +2,11 @@ import { test, expect } from "./fixtures";
 import { ADMIN_PATH, ADMIN_ROUTE } from "../src/lib/admin-route";
 import { TEST_API_BASE } from "./utils";
 
-const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || "Siya@2904";
+const ADMIN_PASSWORD = process.env.PLAYWRIGHT_ADMIN_PASSWORD;
+
+if (!ADMIN_PASSWORD) {
+  throw new Error("PLAYWRIGHT_ADMIN_PASSWORD must be configured to run admin Playwright tests.");
+}
 
 // Logs in against the backend and seeds the admin session before the app boots.
 // The token is cached per worker so a full suite only hits /api/admin/login a

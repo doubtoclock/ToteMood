@@ -15,7 +15,7 @@ export default function NotFound() {
           Page Not Found
         </h2>
         <p className="text-[#5A5A55] text-lg mb-10 max-w-md mx-auto">
-          It looks like the page you are looking for has been moved or doesn't exist. Let's get you back on track.
+          It looks like the page you are looking for has been moved or doesn&apos;t exist. Let&apos;s get you back on track.
         </p>
         
         <Link 

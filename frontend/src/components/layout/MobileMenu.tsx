@@ -2,13 +2,14 @@
 
 import { motion, AnimatePresence } from "framer-motion";
 import Link from "next/link";
-import { X, Package } from "lucide-react";
+import { X, Package, ChevronDown } from "lucide-react";
 import { useEffect, useState } from "react";
 import { usePathname } from "next/navigation";
 import Image from "next/image";
 import { useAuthStore } from "@/lib/store/useAuthStore";
 import { Rokkitt } from 'next/font/google';
 import { LogoText } from "@/components/ui/LogoText";
+import { useCategories } from "@/lib/useCategories";
 
 const logoFont = Rokkitt({ 
   weight: ['600'],
@@ -26,6 +27,8 @@ export function MobileMenu({ isOpen, onClose }: MobileMenuProps) {
   const profile = useAuthStore((state) => (state.profile.email ? state.profile : null));
   const hydrateAuth = useAuthStore((state) => state.hydrate);
   const signOut = useAuthStore((state) => state.signOut);
+  const { categories, loading: categoriesLoading } = useCategories();
+  const [categoriesOpen, setCategoriesOpen] = useState(false);
 
   useEffect(() => {
     if (isOpen) {
@@ -112,6 +115,12 @@ export function MobileMenu({ isOpen, onClose }: MobileMenuProps) {
                   </motion.div>
                 );
               })}
+              <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.5, duration: 0.4 }}>
+                <button type="button" onClick={() => setCategoriesOpen((open) => !open)} aria-expanded={categoriesOpen} className="flex w-full items-center justify-between font-heading text-4xl font-medium tracking-tight text-foreground transition-opacity hover:opacity-70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+                  Collections <ChevronDown className={`h-6 w-6 transition-transform ${categoriesOpen ? "rotate-180" : ""}`} />
+                </button>
+                {categoriesOpen && <div className="mt-4 max-h-44 space-y-1 overflow-y-auto rounded-xl border border-border bg-white/50 p-2">{categoriesLoading ? <p className="px-3 py-2 text-sm text-secondary-foreground">Loading collections…</p> : categories.length === 0 ? <p className="px-3 py-2 text-sm text-secondary-foreground">Collections are coming soon.</p> : categories.map((category) => <Link key={category.id} href={`/categories/${category.slug}`} onClick={onClose} className="block rounded-lg px-3 py-2 font-sans text-base font-medium text-foreground hover:bg-[#F5F3EC] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">{category.name}</Link>)}</div>}
+              </motion.div>
             </nav>
             
             <div className="pb-8 flex flex-col space-y-6">

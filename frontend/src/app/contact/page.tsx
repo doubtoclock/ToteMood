@@ -4,10 +4,9 @@ import { useState } from "react";
 import { Container } from "@/components/layout/Container";
 import { Section } from "@/components/layout/Section";
 import { AmbientGlow } from "@/components/ui/AmbientGlow";
-import { Mail, Phone, MapPin, MessageCircle, Loader2 } from "lucide-react";
+import { Mail, MessageCircle, Loader2 } from "lucide-react";
 
 const WHATSAPP_PHONE = "919890842755";
-const SUBJECT_MAX = 60;
 const MESSAGE_MAX = 500;
 
 const SUBJECTS = [

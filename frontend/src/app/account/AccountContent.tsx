@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import Image from "next/image";
 import { Section } from "@/components/layout/Section";
 import { AmbientGlow } from "@/components/ui/AmbientGlow";
@@ -30,7 +30,7 @@ interface AccountOrderItem {
   customText?: string | null;
   product?: {
     name: string;
-    image: string;
+    image?: string | null;
     label: string;
     category: string;
   } | null;
@@ -93,7 +93,6 @@ function prettyStatus(status: string) {
 
 export function AccountContent() {
   const [googleButtonNode, setGoogleButtonNode] = useState<HTMLDivElement | null>(null);
-  const addressFormRef = useRef<HTMLDivElement | null>(null);
   const [activeTab, setActiveTab] = useState<AccountTab>("details");
   const profile = useAuthStore((state) => state.profile);
   const accountToken = useAuthStore((state) => state.token);
@@ -126,7 +125,7 @@ export function AccountContent() {
 
   const scrollAddressFormIntoView = () => {
     window.requestAnimationFrame(() => {
-      addressFormRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+      document.getElementById("account-address-form")?.scrollIntoView({ behavior: "smooth", block: "start" });
     });
   };
 
@@ -163,7 +162,7 @@ export function AccountContent() {
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Google sign-in failed.");
     }
-  }, [signIn]);
+  }, [signIn, setMessage]);
 
   useEffect(() => {
     if (!GOOGLE_CLIENT_ID || accountToken || !googleButtonNode) return;
@@ -189,7 +188,7 @@ export function AccountContent() {
     }
 
     let cancelled = false;
-    setIsLoading(true);
+    const loadingTimer = window.setTimeout(() => setIsLoading(true), 0);
     const headers = accountAuthHeaders();
     Promise.all([
       apiFetch<AccountOrder[]>("/api/account/orders", { headers }),
@@ -209,6 +208,7 @@ export function AccountContent() {
 
     return () => {
       cancelled = true;
+      window.clearTimeout(loadingTimer);
     };
   }, [accountToken]);
 
@@ -464,7 +464,7 @@ export function AccountContent() {
       {!accountToken && <p className="text-[14px] text-[#686B59] mb-6">Sign in with Google before managing addresses.</p>}
 
       {accountToken && (
-        <div ref={addressFormRef} className={editingAddress ? "rounded-[18px] ring-2 ring-[#8E9476]/30 ring-offset-4 ring-offset-white transition-shadow" : "transition-shadow"}>
+        <div id="account-address-form" className={editingAddress ? "rounded-[18px] ring-2 ring-[#8E9476]/30 ring-offset-4 ring-offset-white transition-shadow" : "transition-shadow"}>
           <AddressForm
             draft={addressDraft}
             errors={fieldErrors}

@@ -21,7 +21,7 @@ export class WebGLErrorBoundary extends React.Component<Props, State> {
     return { hasError: true };
   }
 
-  componentDidCatch(error: Error, errorInfo: React.ErrorInfo) {
+  componentDidCatch(error: Error) {
     console.warn("WebGL error caught, showing fallback:", error.message);
   }
 

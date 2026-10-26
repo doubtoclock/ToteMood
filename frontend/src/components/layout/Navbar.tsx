@@ -1,9 +1,9 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { ShoppingBag, Menu, LogOut, Package } from "lucide-react";
+import { ShoppingBag, Menu, Package, ChevronDown } from "lucide-react";
 import Image from "next/image";
 import { motion, useScroll, useMotionValueEvent } from "framer-motion";
 import { MobileMenu } from "./MobileMenu";
@@ -13,6 +13,7 @@ import { CartDrawer } from "@/components/cart/CartDrawer";
 import { ACCOUNT_AUTH_CHANGED_EVENT } from "@/lib/account";
 import { Rokkitt } from 'next/font/google';
 import { ADMIN_PATH } from "@/lib/admin-route";
+import { useCategories } from "@/lib/useCategories";
 
 const logoFont = Rokkitt({ 
   weight: ['600'],
@@ -26,10 +27,12 @@ export function Navbar() {
     state.profile.email ? state.profile : null,
   );
   const hydrateAuth = useAuthStore((state) => state.hydrate);
-  const signOut = useAuthStore((state) => state.signOut);
   const { toggleCart, getItemCount } = useCartStore();
   const { scrollY } = useScroll();
   const pathname = usePathname();
+  const { categories, loading: categoriesLoading } = useCategories();
+  const [categoriesOpen, setCategoriesOpen] = useState(false);
+  const categoryMenuRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     hydrateAuth();
@@ -41,6 +44,19 @@ export function Navbar() {
       window.removeEventListener(ACCOUNT_AUTH_CHANGED_EVENT, onStorage);
     };
   }, [hydrateAuth]);
+
+  useEffect(() => {
+    const closeOnOutsideClick = (event: MouseEvent) => {
+      if (categoryMenuRef.current && !categoryMenuRef.current.contains(event.target as Node)) setCategoriesOpen(false);
+    };
+    const closeOnEscape = (event: KeyboardEvent) => { if (event.key === "Escape") setCategoriesOpen(false); };
+    document.addEventListener("mousedown", closeOnOutsideClick);
+    document.addEventListener("keydown", closeOnEscape);
+    return () => {
+      document.removeEventListener("mousedown", closeOnOutsideClick);
+      document.removeEventListener("keydown", closeOnEscape);
+    };
+  }, []);
 
   useMotionValueEvent(scrollY, "change", (latest) => {
     if (pathname === "/") {
@@ -55,8 +71,6 @@ export function Navbar() {
     }
   });
 
-  const handleLogout = signOut;
-
   if (pathname?.startsWith(ADMIN_PATH)) {
     return null;
   }
@@ -69,7 +83,7 @@ export function Navbar() {
         }`}
       >
         <div 
-          className={`w-full max-w-7xl transition-all duration-500 flex items-center justify-between ${
+          className={`w-full max-w-none transition-all duration-500 flex items-center justify-between ${
             isScrolled
               ? "bg-white/90 backdrop-blur-md border border-black/5 rounded-full shadow-[0_8px_30px_rgba(0,0,0,0.04)] py-2 px-4 md:py-3 md:px-8"
               : "py-4 px-4 md:py-5 md:px-6 lg:px-8"
@@ -116,6 +130,20 @@ export function Navbar() {
                 </Link>
               );
             })}
+            <div ref={categoryMenuRef} className="relative">
+              <button type="button" aria-haspopup="menu" aria-expanded={categoriesOpen} onClick={() => setCategoriesOpen((open) => !open)} className="flex items-center gap-1 font-sans text-[13px] lg:text-[14px] uppercase tracking-[0.2em] font-medium text-[#1C1C1A]/80 hover:text-[#1C1C1A] transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[#1C1C1A] rounded-sm px-2 py-1">
+                Collections <ChevronDown className={`h-3.5 w-3.5 transition-transform ${categoriesOpen ? "rotate-180" : ""}`} />
+              </button>
+              {categoriesOpen && (
+                <div role="menu" className="absolute left-1/2 top-full mt-3 w-72 -translate-x-1/2 rounded-2xl border border-[#E8E5DC] bg-white p-2 shadow-xl">
+                  {categoriesLoading ? <p className="px-3 py-3 text-sm text-[#686B59]">Loading collections…</p> : categories.length === 0 ? <p className="px-3 py-3 text-sm text-[#686B59]">Collections are coming soon.</p> : categories.map((category) => (
+                    <Link role="menuitem" key={category.id} href={`/categories/${category.slug}`} onClick={() => setCategoriesOpen(false)} className="flex items-center gap-3 rounded-xl px-2 py-2 text-sm font-medium text-[#252A1A] hover:bg-[#F5F3EC] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#757D5C]">
+                      <span className="relative h-10 w-10 shrink-0 overflow-hidden rounded-lg bg-[#F5F3EC]"><Image src={category.coverImage} alt="" fill sizes="40px" className="object-cover" /></span><span className="min-w-0 truncate">{category.name}</span>
+                    </Link>
+                  ))}
+                </div>
+              )}
+            </div>
           </nav>
 
           {/* Right: Actions */}

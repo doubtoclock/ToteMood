@@ -3,7 +3,9 @@
 import Image from "next/image";
 import Link from "next/link";
 import { ShoppingCart, Star, Truck } from "lucide-react";
+import { useState } from "react";
 import { ShopHeader } from "@/components/shop/ShopHeader";
+import { ShopCategories } from "@/components/shop/ShopCategories";
 import { ShopSkeleton } from "@/components/shop/ShopSkeleton";
 import { ShopNewsletter } from "@/components/shop/ShopNewsletter";
 import { CustomerStories } from "@/components/home/CustomerStories";
@@ -12,7 +14,8 @@ import { useCartStore } from "@/lib/store/useCartStore";
 import { offerSignInIfSignedOut } from "@/lib/store/useSignInPrompt";
 
 export default function ShopPage() {
-  const { products, loading } = useProducts();
+  const [page, setPage] = useState(1);
+  const { products, loading, error, pagination, refetch } = useProducts({ page, pageSize: 12 });
   const addItem = useCartStore((state) => state.addItem);
 
   return (
@@ -37,12 +40,27 @@ export default function ShopPage() {
       {/* 1. Quiet Brand Intro */}
       <ShopHeader />
 
+      <ShopCategories />
+
       {/* 2. Product Discovery */}
       <section id="all-products" className="pt-0 pb-16 md:pt-2 md:pb-24 bg-[#FAF9F8]">
         <div className="container mx-auto px-4 sm:px-6 lg:px-12">
           {loading ? (
             <ShopSkeleton />
+          ) : error && products.length === 0 ? (
+            <div className="rounded-[24px] border border-[#E8E5DC] bg-white px-6 py-16 text-center">
+              <h2 className="font-heading text-3xl text-[#1C1C1A]">Our tote collection is loading</h2>
+              <p className="mx-auto mt-3 max-w-md text-[#5A5A55]">We couldn&apos;t reach the collection just now. Please try again.</p>
+              <button
+                type="button"
+                onClick={() => void refetch()}
+                className="mt-7 rounded-full bg-[#757D5C] px-6 py-3 text-sm font-bold uppercase tracking-widest text-white transition-colors hover:bg-[#5C6348]"
+              >
+                Try again
+              </button>
+            </div>
           ) : (
+            <>
             <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 sm:gap-8 md:gap-10">
               {products.map((product, index) => (
                 <div
@@ -107,7 +125,7 @@ export default function ShopPage() {
                         ))}
                       </div>
                       <span className="text-[10px] sm:text-[12px] text-[#8C867C]">
-                        ({product.reviews && product.reviews > 0 ? product.reviews : 142})
+                        ({product.reviews})
                       </span>
                     </div>
                   </div>
@@ -115,6 +133,14 @@ export default function ShopPage() {
               </div>
             ))}
             </div>
+            {pagination && pagination.totalPages > 1 && (
+              <nav aria-label="Product pages" className="mt-12 flex flex-wrap items-center justify-center gap-3">
+                <button type="button" disabled={!pagination.hasPreviousPage} onClick={() => setPage((current) => Math.max(1, current - 1))} className="rounded-full border border-[#1C1C1A]/20 px-5 py-2.5 text-sm font-bold text-[#252A1A] disabled:cursor-not-allowed disabled:opacity-40">Previous</button>
+                <span className="text-sm text-[#5A5A55]">Page {pagination.page} of {pagination.totalPages}</span>
+                <button type="button" disabled={!pagination.hasNextPage} onClick={() => setPage((current) => current + 1)} className="rounded-full bg-[#252A1A] px-5 py-2.5 text-sm font-bold text-white disabled:cursor-not-allowed disabled:opacity-40">Next</button>
+              </nav>
+            )}
+            </>
           )}
         </div>
       </section>

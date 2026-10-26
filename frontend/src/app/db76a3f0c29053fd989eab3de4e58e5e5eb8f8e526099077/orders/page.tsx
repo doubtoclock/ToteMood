@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   Download,
   Eye,
@@ -53,6 +53,19 @@ interface Order {
   status: string;
   createdAt: string;
   items: OrderItem[];
+}
+
+interface Pagination {
+  page: number;
+  totalPages: number;
+  total: number;
+  hasNextPage: boolean;
+  hasPreviousPage: boolean;
+}
+
+interface OrderListResponse {
+  items: Order[];
+  pagination: Pagination;
 }
 
 const ORDER_STATUSES = [
@@ -200,6 +213,8 @@ function downloadCsv(dateKey: string, orders: Order[]) {
 
 export default function AdminOrdersPage() {
   const [orders, setOrders] = useState<Order[] | null>(null);
+  const [page, setPage] = useState(1);
+  const [pagination, setPagination] = useState<Pagination | null>(null);
   const [error, setError] = useState("");
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
@@ -208,12 +223,17 @@ export default function AdminOrdersPage() {
   const [displayIdInput, setDisplayIdInput] = useState("");
   const [displayIdError, setDisplayIdError] = useState("");
 
-  useEffect(() => {
-    apiFetch<Order[]>("/api/orders")
+  const fetchOrders = useCallback(() => {
+    apiFetch<OrderListResponse>(`/api/orders?page=${page}&pageSize=25`)
       .then((data) => {
-        setOrders(data);
+        setOrders(data.items);
+        setPagination(data.pagination);
       })
       .catch((err) => setError(err instanceof Error ? err.message : "Failed to load orders."));
+  }, [page]);
+
+  useEffect(() => {
+    fetchOrders();
 
     if (!ENABLE_REALTIME) return;
 
@@ -225,32 +245,24 @@ export default function AdminOrdersPage() {
     });
     socket.on("connect_error", () => {});
 
-    socket.on("new_order", (order: Order) => {
-      setOrders((prev) => (prev ? [order, ...prev] : prev));
-    });
-
-    socket.on("order_updated", (updatedOrder: Order) => {
-      setOrders((prev) =>
-        prev ? prev.map((o) => (o.id === updatedOrder.id ? updatedOrder : o)) : prev
-      );
-      setSelectedOrder((prev) => (prev?.id === updatedOrder.id ? updatedOrder : prev));
-    });
-
-    socket.on("order_deleted", (deletedId: string) => {
-      setOrders((prev) => (prev ? prev.filter((o) => o.id !== deletedId) : prev));
-      setSelectedOrder((prev) => (prev?.id === deletedId ? null : prev));
-    });
+    // Re-read only the active page after a change. Prepending or mutating a
+    // local page can otherwise duplicate rows or shift pagination boundaries.
+    socket.on("new_order", fetchOrders);
+    socket.on("order_updated", fetchOrders);
+    socket.on("order_deleted", fetchOrders);
 
     return () => {
       socket.disconnect();
     };
-  }, []);
+  }, [fetchOrders]);
 
   const handleDelete = async (id: string) => {
     if (!confirm("Are you sure you want to delete this order?")) return;
     setDeletingId(id);
     try {
       await apiFetch(`/api/orders/${id}`, { method: "DELETE" });
+      setOrders((current) => current?.filter((order) => order.id !== id) ?? current);
+      setSelectedOrder((current) => current?.id === id ? null : current);
     } catch (err) {
       console.error(err);
     } finally {
@@ -261,10 +273,12 @@ export default function AdminOrdersPage() {
   const handleUpdateStatus = async (id: string, newStatus: string) => {
     setUpdatingId(id);
     try {
-      await apiFetch(`/api/orders/${id}`, {
+      const updated = await apiFetch<Order>(`/api/orders/${id}`, {
         method: "PUT",
         body: JSON.stringify({ status: newStatus }),
       });
+      setOrders((current) => current?.map((order) => order.id === updated.id ? updated : order) ?? current);
+      setSelectedOrder((current) => current?.id === updated.id ? updated : current);
     } catch (err) {
       console.error(err);
     } finally {
@@ -280,13 +294,15 @@ export default function AdminOrdersPage() {
     setUpdatingId(orderId);
     setDisplayIdError("");
     try {
-      await apiFetch(`/api/orders/${orderId}`, {
+      const updated = await apiFetch<Order>(`/api/orders/${orderId}`, {
         method: "PUT",
         body: JSON.stringify({ displayId: displayIdInput }),
       });
+      setOrders((current) => current?.map((order) => order.id === updated.id ? updated : order) ?? current);
+      setSelectedOrder((current) => current?.id === updated.id ? updated : current);
       setEditingDisplayId(null);
-    } catch (err: any) {
-      const msg = err?.message || "Failed to update Order ID.";
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Failed to update Order ID.";
       setDisplayIdError(msg);
     } finally {
       setUpdatingId(null);
@@ -330,7 +346,7 @@ export default function AdminOrdersPage() {
             title="Download all orders as CSV"
           >
             <FileSpreadsheet className="w-4 h-4" />
-            Download CSV
+            Download this page
           </button>
         )}
       </div>
@@ -440,6 +456,13 @@ export default function AdminOrdersPage() {
           </section>
         );
       })}
+      {pagination && pagination.totalPages > 1 && (
+        <nav aria-label="Order pages" className="flex items-center justify-center gap-3">
+          <button type="button" disabled={!pagination.hasPreviousPage} onClick={() => setPage((current) => Math.max(1, current - 1))} className="rounded-xl border border-[#1C1C1A]/20 px-4 py-2 text-sm font-bold disabled:cursor-not-allowed disabled:opacity-40">Previous</button>
+          <span className="text-sm text-[#5A5A55]">Page {pagination.page} of {pagination.totalPages} · {pagination.total} orders</span>
+          <button type="button" disabled={!pagination.hasNextPage} onClick={() => setPage((current) => current + 1)} className="rounded-xl bg-[#1C1C1A] px-4 py-2 text-sm font-bold text-white disabled:cursor-not-allowed disabled:opacity-40">Next</button>
+        </nav>
+      )}
 
       <p className="text-xs text-[#8C867C]">
         Times shown in IST (Supabase stores timestamps in UTC).

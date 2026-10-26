@@ -51,7 +51,10 @@ export function SignInToast({ open, onDismiss }: { open: boolean; onDismiss?: ()
   const [dismissed, setDismissed] = useState(false);
 
   useEffect(() => {
-    if (!open) setDismissed(false);
+    if (!open) {
+      const timer = window.setTimeout(() => setDismissed(false), 0);
+      return () => window.clearTimeout(timer);
+    }
   }, [open]);
 
   if (!open || dismissed || accountToken) return null;

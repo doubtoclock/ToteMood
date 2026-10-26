@@ -26,7 +26,7 @@ const VERIFY_RETRY_DELAYS_MS = [1000, 2000];
 const CONFIRMING_ORDER_MIN_MS = 1800;
 const PAYMENT_SETUP_TIMEOUT_MS = 20000;
 const requiresImage = (category: string) => category === "image" || category === "image+text";
-const requiresText = (category: string) => category === "image+text";
+const requiresText = (category: string) => category === "text" || category === "image+text";
 
 const SERVER_FIELD_TO_FORM_FIELD: Record<string, string> = {
   customerEmail: "email",
@@ -84,13 +84,15 @@ const emptyCheckoutForm = {
 
 export default function CheckoutPage() {
   const { items, getTotal, setCustomImage, setCustomText, clearCart, syncProducts } = useCartStore();
-  const { products: liveProducts } = useProducts();
+  const cartProductIds = items.map((item) => item.product.id).sort();
+  const { products: liveProducts } = useProducts({ ids: cartProductIds, pageSize: Math.max(1, cartProductIds.length) });
   const fileInputRef = useRef<HTMLInputElement>(null);
   
   const [activeUpload, setActiveUpload] = useState<{ id: string; index: number } | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
   const [isConfirmingOrder, setIsConfirmingOrder] = useState(false);
   const [isSuccess, setIsSuccess] = useState(false);
+  const [isPaymentPending, setIsPaymentPending] = useState(false);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [checkoutError, setCheckoutError] = useState("");
   const [confirmedOrderId, setConfirmedOrderId] = useState("");
@@ -222,7 +224,7 @@ export default function CheckoutPage() {
 
     for (let attempt = 0; attempt <= VERIFY_RETRY_DELAYS_MS.length; attempt += 1) {
       try {
-        return await apiFetch<{ order: { id: string; displayId: string } }>('/api/checkout/verify-razorpay', {
+        return await apiFetch<{ order: { id: string; displayId: string }; pending: boolean }>('/api/checkout/verify-razorpay', {
           method: 'POST',
           body: JSON.stringify(response),
         });
@@ -259,6 +261,7 @@ export default function CheckoutPage() {
     setCheckoutError("");
     setFieldErrors({});
     setIsConfirmingOrder(false);
+    setIsPaymentPending(false);
 
     const localErrors = validateForm(formValues);
     if (Object.keys(localErrors).length > 0) {
@@ -365,6 +368,13 @@ export default function CheckoutPage() {
                 verifyRazorpayPayment(response),
                 wait(CONFIRMING_ORDER_MIN_MS),
               ]);
+              if (result.pending) {
+                setConfirmedOrderId(result.order.displayId);
+                setIsPaymentPending(true);
+                setIsConfirmingOrder(false);
+                resolve();
+                return;
+              }
               setConfirmedOrderId(result.order.displayId);
               setIsSuccess(true);
               setIsConfirmingOrder(false);
@@ -458,6 +468,24 @@ export default function CheckoutPage() {
           <Link href="/shop" className="inline-flex items-center justify-center bg-[#252A1A] text-white h-[54px] px-10 rounded-[14px] font-bold uppercase tracking-[0.1em] text-[13px] hover:bg-[#3A3E2F] transition-colors shadow-sm">
             Continue Shopping &rarr;
           </Link>
+        </div>
+      </main>
+    );
+  }
+
+  if (isPaymentPending) {
+    return (
+      <main className="min-h-screen bg-[#FAF9F8] pt-32 pb-24 relative overflow-hidden flex flex-col items-center justify-center text-center px-6">
+        <AmbientGlow color="bg-[#C4C9B3]" opacity={0.2} position="top-[10%] left-[20%]" shape="organic1" />
+        <div className="bg-white p-10 md:p-16 rounded-[24px] shadow-sm max-w-lg w-full relative z-10 border border-[#E8E5DC]">
+          <Loader2 className="w-16 h-16 animate-spin text-[#8E9476] mx-auto mb-6" strokeWidth={1.5} />
+          <h1 className="text-[32px] font-title text-[#252A1A] mb-4">Payment Processing</h1>
+          <p className="text-[#686B59] mb-6 leading-[1.6]">Razorpay accepted your payment, but we&apos;re still waiting for authoritative confirmation. Your order is not confirmed yet.</p>
+          {confirmedOrderId && <p className="text-[12px] font-bold uppercase tracking-widest text-[#8C867C] mb-6">Reference #{confirmedOrderId}</p>}
+          <div className="flex flex-col sm:flex-row gap-3 justify-center">
+            <Link href="/account" className="inline-flex items-center justify-center bg-[#252A1A] text-white h-[54px] px-6 rounded-[14px] font-bold uppercase tracking-[0.1em] text-[12px]">Check Order Status</Link>
+            <button type="button" onClick={() => window.location.reload()} className="inline-flex items-center justify-center border border-[#252A1A] text-[#252A1A] h-[54px] px-6 rounded-[14px] font-bold uppercase tracking-[0.1em] text-[12px]">Refresh Status</button>
+          </div>
         </div>
       </main>
     );

@@ -36,11 +36,11 @@ export default function AboutPage() {
                 </p>
                 
                 <p>
-                  In a world of fast and forgettable gifts, I want to bring back emotion—gifts that make people smile, feel seen, and feel loved. By turning memories into art and moments into keepsakes, I aim to help you express what words sometimes can't.
+                  In a world of fast and forgettable gifts, I want to bring back emotion—gifts that make people smile, feel seen, and feel loved. By turning memories into art and moments into keepsakes, I aim to help you express what words sometimes can&apos;t.
                 </p>
                 
                 <p>
-                  Every personalised gift I create is made with care, because to me, it's not just a product—it's a piece of someone's love story.
+                  Every personalised gift I create is made with care, because to me, it&apos;s not just a product—it&apos;s a piece of someone&apos;s love story.
                 </p>
               </div>
             </div>

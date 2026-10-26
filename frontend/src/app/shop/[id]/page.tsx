@@ -15,8 +15,8 @@ import Link from "next/link";
 export default function ProductPage() {
   const params = useParams<{ id: string }>();
   const id = params.id;
-  const { products, loading } = useProducts();
-  const product = products.find((p) => p.id === id);
+  const { products, loading } = useProducts({ ids: id ? [id] : [], pageSize: 1, details: true });
+  const product = products[0];
 
   if (loading && !product) {
     return (
@@ -69,7 +69,7 @@ export default function ProductPage() {
         <ProductTop product={product} />
 
         {/* 2. Why Product? Section */}
-        <ProductFeatures productName={product.name} />
+        <ProductFeatures />
 
         {/* 3. Customer Reviews */}
         <ProductReviews />

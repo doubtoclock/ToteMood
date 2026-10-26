@@ -5,10 +5,18 @@ services:
     region: oregon
     plan: free
     rootDir: backend
-    buildCommand: npm install && npx prisma generate
-    startCommand: npx tsx src/index.ts
+    buildCommand: npm ci && npx prisma generate && npx prisma migrate deploy
+    startCommand: npm start
     envVars:
+      - key: NODE_ENV
+        value: production
       - key: DATABASE_URL
+        sync: false
+      - key: DIRECT_URL
+        sync: false
+      - key: CORS_ORIGINS
+        sync: false
+      - key: ADMIN_PASSWORD_HASH
         sync: false
       - key: GOKWIK_APP_ID
         sync: false
@@ -21,6 +29,8 @@ services:
       - key: RAZORPAY_KEY_ID
         sync: false
       - key: RAZORPAY_KEY_SECRET
+        sync: false
+      - key: RAZORPAY_WEBHOOK_SECRET
         sync: false
       - key: GOOGLE_CLIENT_ID
         sync: false

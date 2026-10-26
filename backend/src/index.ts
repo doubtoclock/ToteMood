@@ -2,11 +2,13 @@ import express from 'express';
 import type { Request, Response, NextFunction } from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
-import { PrismaClient } from '@prisma/client';
+import { Prisma, PrismaClient } from '@prisma/client';
 import { createServer } from 'http';
 import { Server } from 'socket.io';
 import crypto from 'crypto';
 import path from 'path';
+import { createClient } from '@supabase/supabase-js';
+import { getPrismaDatabaseUrl } from './database-url';
 
 dotenv.config({ quiet: true });
 dotenv.config({ path: path.resolve(__dirname, '../.env'), quiet: true });
@@ -22,7 +24,15 @@ const RAZORPAY_KEY_SECRET = process.env.RAZORPAY_KEY_SECRET || '';
 const RAZORPAY_WEBHOOK_SECRET = process.env.RAZORPAY_WEBHOOK_SECRET || '';
 const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID || process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID || '';
 const SESSION_SECRET = process.env.SESSION_SECRET || (!isProduction ? 'totemood-dev-session-secret' : '');
+// Supabase clients expect the project root, while older REST configuration
+// commonly stores a `/rest/v1` suffix in this variable.
+const SUPABASE_URL = (process.env.SUPABASE_URL || '').replace(/\/rest\/v1\/?$/, '');
+// Accept the project's existing server-only Supabase key name while preferring
+// the explicit service-role variable used by the category storage integration.
+const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_KEY || '';
+const CATEGORY_IMAGE_BUCKET = process.env.CATEGORY_IMAGE_BUCKET || 'category-images';
 const CHECKOUT_DEPOSIT_AMOUNT = 49;
+const MAX_PRODUCT_REVIEW_COUNT = 1_000_000;
 
 // Amount actually collected from Razorpay for this checkout.
 // Prepaid: the full order. COD: the deposit only (rest is cash on delivery).
@@ -31,28 +41,23 @@ function payoutAmountFor(checkout: PendingCheckout): number {
     ? checkout.total
     : Math.min(CHECKOUT_DEPOSIT_AMOUNT, checkout.total);
 }
-const productionAllowedOrigins = [
-  'https://totemood.com',
-  'https://www.totemood.com',
-  'https://totemood.mywire.org',
-  'https://www.totemood.mywire.org',
-];
 const developmentAllowedOrigins = [
   'http://localhost:3000',
   'http://localhost:3001',
   'http://localhost:4010',
 ];
-const defaultAllowedOrigins = isProduction
-  ? productionAllowedOrigins
-  : productionAllowedOrigins.concat(developmentAllowedOrigins);
+const configuredAllowedOrigins = (process.env.CORS_ORIGINS || '')
+  .split(',')
+  .map((origin) => origin.trim())
+  .filter(Boolean);
+if (isProduction && configuredAllowedOrigins.length === 0) {
+  throw new Error('CORS_ORIGINS must list the deployed frontend origin in production.');
+}
 const allowedOrigins = new Set(
-  (process.env.CORS_ORIGINS || '')
-    .split(',')
-    .map((origin) => origin.trim())
-    .filter(Boolean)
-    .concat(defaultAllowedOrigins)
+  configuredAllowedOrigins.concat(isProduction ? [] : developmentAllowedOrigins)
 );
-const JSON_BODY_LIMIT = process.env.JSON_BODY_LIMIT || '3mb';
+const JSON_BODY_LIMIT = process.env.JSON_BODY_LIMIT || '8mb';
+const WEBHOOK_BODY_LIMIT_BYTES = 1024 * 1024;
 const corsOptions: cors.CorsOptions = {
   origin(origin, callback) {
     if (!origin || allowedOrigins.has(origin)) {
@@ -78,10 +83,16 @@ app.use('/api/webhooks/razorpay', (req: Request, _res: Response, next: NextFunct
   const chunks: Buffer[] = [];
   let total = 0;
   req.on('data', (chunk: Buffer) => {
-    chunks.push(chunk);
     total += chunk.length;
+    if (total <= WEBHOOK_BODY_LIMIT_BYTES) chunks.push(chunk);
   });
   req.on('end', () => {
+    if (total > WEBHOOK_BODY_LIMIT_BYTES) {
+      const error = new Error('Webhook payload is too large.') as Error & { status?: number };
+      error.status = 413;
+      next(error);
+      return;
+    }
     (req as any).rawWebhookBody = Buffer.concat(chunks, total);
     next();
   });
@@ -97,7 +108,7 @@ app.use((_req: Request, res: Response, next: NextFunction) => {
   next();
 });
 app.use((error: unknown, _req: Request, res: Response, next: NextFunction) => {
-  if (error && typeof error === 'object' && 'type' in error && error.type === 'entity.too.large') {
+  if (error && typeof error === 'object' && (('type' in error && error.type === 'entity.too.large') || ('status' in error && error.status === 413))) {
     return res.status(413).json({
       error: 'Uploaded image is too large. Please choose a smaller image and try again.',
     });
@@ -135,7 +146,7 @@ function rateLimit(options: { windowMs: number; max: number; keyPrefix: string }
   };
 }
 
-setInterval(() => {
+const rateLimitCleanupInterval = setInterval(() => {
   const now = Date.now();
   for (const [key, bucket] of rateLimitBuckets) {
     if (now > bucket.resetAt) {
@@ -151,30 +162,6 @@ app.use((req: Request, _res: Response, next: NextFunction) => {
   }
   next();
 });
-
-function getPrismaDatabaseUrl(): string {
-  const databaseUrl = process.env.DATABASE_URL;
-  if (!databaseUrl) {
-    throw new Error('DATABASE_URL environment variable is not set.');
-  }
-
-  try {
-    const url = new URL(databaseUrl);
-    const usesPooler = url.hostname.includes('pooler.supabase.com') || url.port === '6543';
-    if (usesPooler && !url.searchParams.has('pgbouncer')) {
-      url.searchParams.set('pgbouncer', 'true');
-    }
-    if (usesPooler && !url.searchParams.has('connection_limit')) {
-      url.searchParams.set('connection_limit', '10');
-    }
-    if (usesPooler && !url.searchParams.has('pool_timeout')) {
-      url.searchParams.set('pool_timeout', '30');
-    }
-    return url.toString();
-  } catch {
-    return databaseUrl;
-  }
-}
 
 // Initialize clients
 const prisma = new PrismaClient({
@@ -196,6 +183,7 @@ const FALLBACK_PRODUCTS = [
     label: 'bestseller',
     category: 'image',
     inventoryCount: 50,
+    reviews: 142,
   },
   {
     id: 'ghibli-text-tote',
@@ -209,6 +197,7 @@ const FALLBACK_PRODUCTS = [
     label: 'bestseller',
     category: 'image+text',
     inventoryCount: 30,
+    reviews: 215,
   },
   {
     id: 'emoji-ghibli-tote',
@@ -222,6 +211,7 @@ const FALLBACK_PRODUCTS = [
     label: 'bestseller',
     category: 'image+text',
     inventoryCount: 20,
+    reviews: 89,
   },
   {
     id: 'polaroid-tote',
@@ -235,6 +225,7 @@ const FALLBACK_PRODUCTS = [
     label: 'new',
     category: 'image',
     inventoryCount: 100,
+    reviews: 34,
   },
   {
     id: 'any-design-tote',
@@ -248,36 +239,149 @@ const FALLBACK_PRODUCTS = [
     label: 'new',
     category: 'image',
     inventoryCount: 85,
+    reviews: 76,
   },
 ];
-const MAX_RESPONSE_DATA_IMAGE_LENGTH = 350_000;
-
-function sanitizeImageForResponse(image: string) {
-  if (image.startsWith('data:image/') && image.length > MAX_RESPONSE_DATA_IMAGE_LENGTH) {
-    return '/images/product_mockup.png';
-  }
-  return image;
-}
-
 function sanitizeProductForResponse<T extends { image: string; gallery?: string[] }>(product: T): T {
-  const image = sanitizeImageForResponse(product.image);
-  const gallery = Array.isArray(product.gallery)
-    ? product.gallery.map(sanitizeImageForResponse)
-    : product.gallery;
-
-  if (image !== product.image || gallery !== product.gallery) {
-    return {
-      ...product,
-      image,
-      gallery,
-    };
-  }
-
+  // Legacy data URLs must continue to render while the separately reviewed
+  // migration is pending. New admin uploads are replaced with storage URLs.
   return product;
 }
 
-function sanitizeProductsForResponse<T extends { image: string; gallery?: string[] }>(products: T[]): T[] {
-  return products.map(sanitizeProductForResponse);
+const CATEGORY_NAME_MAX_LENGTH = 80;
+const CATEGORY_IMAGE_MAX_BYTES = 2 * 1024 * 1024;
+const CATEGORY_IMAGE_DATA_URL = /^data:image\/(jpeg|jpg|png|webp);base64,([a-z0-9+/=]+)$/i;
+
+function slugifyCategoryName(value: string) {
+  return value
+    .normalize('NFKD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 72);
+}
+
+async function getAvailableCategorySlug(name: string, excludeId?: string) {
+  const base = slugifyCategoryName(name);
+  if (!base) throw new Error('Category name must include letters or numbers.');
+  const candidates = await prisma.category.findMany({
+    where: excludeId ? { id: { not: excludeId }, slug: { startsWith: base } } : { slug: { startsWith: base } },
+    select: { slug: true },
+  });
+  const used = new Set(candidates.map((category) => category.slug));
+  if (!used.has(base)) return base;
+  for (let suffix = 2; suffix < 10_000; suffix += 1) {
+    const candidate = `${base}-${suffix}`;
+    if (!used.has(candidate)) return candidate;
+  }
+  throw new Error('Could not create a unique category URL.');
+}
+
+function normalizeCategoryName(value: unknown) {
+  const name = String(value || '').trim().replace(/\s+/g, ' ');
+  if (!name) throw new Error('Category name is required.');
+  if (name.length > CATEGORY_NAME_MAX_LENGTH) throw new Error(`Category name must be ${CATEGORY_NAME_MAX_LENGTH} characters or fewer.`);
+  return name;
+}
+
+function decodeCategoryImage(value: unknown) {
+  const match = String(value || '').match(CATEGORY_IMAGE_DATA_URL);
+  if (!match) throw new Error('Choose a JPEG, PNG, or WebP image.');
+  const imageFormat = match[1];
+  const encodedImage = match[2];
+  if (!imageFormat || !encodedImage) throw new Error('Choose a JPEG, PNG, or WebP image.');
+  const mimeType = imageFormat.toLowerCase() === 'jpg' ? 'image/jpeg' : `image/${imageFormat.toLowerCase()}`;
+  const bytes = Buffer.from(encodedImage, 'base64');
+  if (!bytes.length || bytes.length > CATEGORY_IMAGE_MAX_BYTES) {
+    throw new Error('Category images must be smaller than 2 MB.');
+  }
+  const isJpeg = bytes.length > 3 && bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff;
+  const isPng = bytes.length > 8 && bytes.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]));
+  const isWebp = bytes.length > 12 && bytes.subarray(0, 4).toString('ascii') === 'RIFF' && bytes.subarray(8, 12).toString('ascii') === 'WEBP';
+  if ((mimeType === 'image/jpeg' && !isJpeg) || (mimeType === 'image/png' && !isPng) || (mimeType === 'image/webp' && !isWebp)) {
+    throw new Error('The selected file did not contain a valid image.');
+  }
+  return { bytes, mimeType, extension: mimeType === 'image/jpeg' ? 'jpg' : mimeType.split('/')[1] };
+}
+
+async function uploadCategoryImage(value: unknown) {
+  if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
+    const error = new Error('Category image storage is not configured. Set SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY.');
+    (error as Error & { status?: number }).status = 503;
+    throw error;
+  }
+  const image = decodeCategoryImage(value);
+  const storage = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, { auth: { persistSession: false } });
+  const objectName = `categories/${crypto.randomUUID()}.${image.extension}`;
+  const { error: uploadError } = await storage.storage.from(CATEGORY_IMAGE_BUCKET).upload(objectName, image.bytes, {
+    contentType: image.mimeType,
+    upsert: false,
+    // A category cover can be replaced or deleted at any time. Immutable
+    // object names make long-lived caching safe for normal rendering, but a
+    // public URL may be checked immediately after deletion, so do not ask the
+    // storage CDN to retain a stale copy.
+    cacheControl: '0',
+  });
+  if (uploadError) throw new Error(`Could not upload category image: ${uploadError.message}`);
+  const { data } = storage.storage.from(CATEGORY_IMAGE_BUCKET).getPublicUrl(objectName);
+  if (!data.publicUrl) throw new Error('Category image storage did not return a public URL.');
+  return data.publicUrl;
+}
+
+function categoryImageObjectName(publicUrl: string) {
+  try {
+    const url = new URL(publicUrl);
+    const prefix = `/storage/v1/object/public/${CATEGORY_IMAGE_BUCKET}/`;
+    return url.pathname.startsWith(prefix) ? decodeURIComponent(url.pathname.slice(prefix.length)) : null;
+  } catch {
+    return null;
+  }
+}
+
+async function removeCategoryImage(publicUrl: string) {
+  if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) return;
+  const objectName = categoryImageObjectName(publicUrl);
+  if (!objectName) return;
+  const storage = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, { auth: { persistSession: false } });
+  const { error } = await storage.storage.from(CATEGORY_IMAGE_BUCKET).remove([objectName]);
+  if (error) throw new Error(`Could not remove category image: ${error.message}`);
+}
+
+function categorySummary(category: { id: string; name: string; slug: string; coverImage: string; createdAt: Date; updatedAt: Date; _count?: { productLinks: number } }) {
+  return {
+    id: category.id,
+    name: category.name,
+    slug: category.slug,
+    coverImage: category.coverImage,
+    createdAt: category.createdAt,
+    updatedAt: category.updatedAt,
+    productCount: category._count?.productLinks ?? 0,
+  };
+}
+
+async function validatedCategoryIds(value: unknown) {
+  if (value === undefined) return undefined;
+  if (!Array.isArray(value) || value.some((id) => typeof id !== 'string' || !id.trim())) {
+    throw new Error('Categories must be a list of category IDs.');
+  }
+  const ids = [...new Set(value.map((id) => id.trim()))];
+  if (ids.length !== value.length) throw new Error('A category can only be selected once.');
+  const found = await prisma.category.findMany({ where: { id: { in: ids } }, select: { id: true } });
+  if (found.length !== ids.length) throw new Error('One or more selected categories no longer exist.');
+  return ids;
+}
+
+function productWithCategories<T extends { image: string; gallery?: string[]; categoryLinks?: Array<{ category: { id: string; name: string; slug: string; coverImage: string } }> }>(product: T) {
+  const sanitized = sanitizeProductForResponse(product);
+  const categories = product.categoryLinks?.map((link) => link.category) || [];
+  return { ...sanitized, categories, categoryIds: categories.map((category) => category.id) };
+}
+
+function productWithCategoriesAndReviews<T extends { image: string; gallery?: string[]; reviews?: number; categoryLinks?: Array<{ category: { id: string; name: string; slug: string; coverImage: string } }> }>(product: T) {
+  const reviews = Number(product.reviews);
+  return { ...productWithCategories(product), reviews: Number.isInteger(reviews) && reviews >= 0 ? reviews : 0 };
 }
 
 const MAX_DISPLAY_ID = 999999;
@@ -394,53 +498,36 @@ const MAX_CHECKOUT_IMAGE_LENGTH = 250_000;
 const SAFE_DATA_IMAGE_PATTERN = /^data:image\/(?:jpeg|jpg|png|webp);base64,[a-z0-9+/=]+$/i;
 const CHECKOUT_TTL_MS = 30 * 60 * 1000;
 
+function isPendingCheckout(value: Prisma.JsonValue): value is Prisma.JsonObject {
+  return typeof value === 'object'
+    && value !== null
+    && !Array.isArray(value)
+    && typeof value.createdAt === 'number'
+    && typeof value.total === 'number'
+    && Array.isArray(value.items)
+    && (value.paymentMethod === 'cod' || value.paymentMethod === 'prepaid');
+}
+
 // --- Persistent checkouts ---
 // The in-memory map above is a fast-path cache only. The authoritative copy
 // lives in the "PendingCheckout" table so a paid checkout survives a Render
 // restart, instance change, or horizontal scale-out.
-let pendingCheckoutTableReady = false;
-async function ensurePendingCheckoutTable() {
-  if (pendingCheckoutTableReady) return;
-  await prisma.$executeRawUnsafe(`
-    CREATE TABLE IF NOT EXISTS "PendingCheckout" (
-      "id" TEXT NOT NULL,
-      "data" JSONB NOT NULL,
-      "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-      "expiresAt" TIMESTAMP(3) NOT NULL,
-      "processedAt" TIMESTAMP(3),
-      CONSTRAINT "PendingCheckout_pkey" PRIMARY KEY ("id")
-    );
-  `);
-  await prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS "PendingCheckout_createdAt_idx" ON "PendingCheckout"("createdAt");`);
-  pendingCheckoutTableReady = true;
-}
-
-let orderPaymentColumnsReady = false;
-async function ensureOrderPaymentColumns() {
-  if (orderPaymentColumnsReady) return;
-  await prisma.$executeRawUnsafe(`ALTER TABLE "Order" ADD COLUMN IF NOT EXISTS "razorpayOrderId" TEXT;`);
-  await prisma.$executeRawUnsafe(`ALTER TABLE "Order" ADD COLUMN IF NOT EXISTS "razorpayPaymentId" TEXT;`);
-  await prisma.$executeRawUnsafe(`ALTER TABLE "Order" ADD COLUMN IF NOT EXISTS "paidAmount" DOUBLE PRECISION NOT NULL DEFAULT 0;`);
-  await prisma.$executeRawUnsafe(`ALTER TABLE "Order" ADD COLUMN IF NOT EXISTS "codBalance" DOUBLE PRECISION NOT NULL DEFAULT 0;`);
-  await prisma.$executeRawUnsafe(`ALTER TABLE "Order" ADD COLUMN IF NOT EXISTS "paymentStatus" TEXT NOT NULL DEFAULT 'pending';`);
-  await prisma.$executeRawUnsafe(`CREATE UNIQUE INDEX IF NOT EXISTS "Order_razorpayPaymentId_key" ON "Order"("razorpayPaymentId") WHERE "razorpayPaymentId" IS NOT NULL;`);
-  await prisma.$executeRawUnsafe(`CREATE UNIQUE INDEX IF NOT EXISTS "Order_razorpayOrderId_key" ON "Order"("razorpayOrderId") WHERE "razorpayOrderId" IS NOT NULL;`);
-  orderPaymentColumnsReady = true;
-}
-
 async function savePendingCheckout(id: string, checkout: PendingCheckout, ttlMs = CHECKOUT_TTL_MS) {
   pendingCheckouts.set(id, checkout);
   try {
-    await ensurePendingCheckoutTable();
-    await prisma.$executeRawUnsafe(
-      `INSERT INTO "PendingCheckout" ("id", "data", "createdAt", "expiresAt")
-       VALUES ($1, $2::jsonb, $3, $4)
-       ON CONFLICT ("id") DO UPDATE SET "data" = EXCLUDED."data", "expiresAt" = EXCLUDED."expiresAt";`,
-      id,
-      JSON.stringify(checkout),
-      new Date(checkout.createdAt),
-      new Date(Date.now() + ttlMs)
-    );
+    await prisma.pendingCheckout.upsert({
+      where: { id },
+      create: {
+        id,
+        data: checkout as unknown as Prisma.InputJsonValue,
+        createdAt: new Date(checkout.createdAt),
+        expiresAt: new Date(Date.now() + ttlMs),
+      },
+      update: {
+        data: checkout as unknown as Prisma.InputJsonValue,
+        expiresAt: new Date(Date.now() + ttlMs),
+      },
+    });
   } catch (error) {
     console.error('Failed to persist pending checkout:', error);
   }
@@ -450,13 +537,12 @@ async function getPendingCheckout(id: string): Promise<PendingCheckout | null> {
   const cached = pendingCheckouts.get(id);
   if (cached) return cached;
   try {
-    await ensurePendingCheckoutTable();
-    const rows = await prisma.$queryRawUnsafe<Array<{ data: string }>>(
-      `SELECT "data" FROM "PendingCheckout" WHERE "id" = $1 AND "expiresAt" > NOW() LIMIT 1;`,
-      id
-    );
-    if (!rows[0]) return null;
-    const checkout = JSON.parse(rows[0].data) as PendingCheckout;
+    const stored = await prisma.pendingCheckout.findFirst({
+      where: { id, expiresAt: { gt: new Date() } },
+      select: { data: true },
+    });
+    if (!stored || !isPendingCheckout(stored.data)) return null;
+    const checkout = stored.data as unknown as PendingCheckout;
     pendingCheckouts.set(id, checkout);
     return checkout;
   } catch (error) {
@@ -468,8 +554,7 @@ async function getPendingCheckout(id: string): Promise<PendingCheckout | null> {
 async function deletePendingCheckout(id: string) {
   pendingCheckouts.delete(id);
   try {
-    await ensurePendingCheckoutTable();
-    await prisma.$executeRawUnsafe(`DELETE FROM "PendingCheckout" WHERE "id" = $1;`, id);
+    await prisma.pendingCheckout.deleteMany({ where: { id } });
   } catch (error) {
     console.error('Failed to delete pending checkout:', error);
   }
@@ -477,13 +562,15 @@ async function deletePendingCheckout(id: string) {
 
 async function findStalePendingCheckouts(): Promise<Array<{ id: string; data: PendingCheckout }>> {
   try {
-    await ensurePendingCheckoutTable();
-    const rows = await prisma.$queryRawUnsafe<Array<{ id: string; data: string }>>(
-      `SELECT "id", "data" FROM "PendingCheckout"
-       WHERE "expiresAt" > NOW() AND "processedAt" IS NULL
-       ORDER BY "createdAt" ASC LIMIT 20;`
-    );
-    return rows.map((row) => ({ id: row.id, data: JSON.parse(row.data) as PendingCheckout }));
+    const rows = await prisma.pendingCheckout.findMany({
+      where: { expiresAt: { gt: new Date() }, processedAt: null },
+      orderBy: { createdAt: 'asc' },
+      take: 20,
+      select: { id: true, data: true },
+    });
+    return rows
+      .filter((row) => isPendingCheckout(row.data))
+      .map((row) => ({ id: row.id, data: row.data as unknown as PendingCheckout }));
   } catch (error) {
     console.error('Failed to find stale pending checkouts:', error);
     return [];
@@ -491,7 +578,7 @@ async function findStalePendingCheckouts(): Promise<Array<{ id: string; data: Pe
 }
 
 // Cleanup stale sessions every 30 minutes
-setInterval(() => {
+const checkoutCleanupInterval = setInterval(() => {
   const now = Date.now();
   const THIRTY_MIN = 30 * 60 * 1000;
   for (const [key, session] of cartSessions) {
@@ -504,11 +591,9 @@ setInterval(() => {
       pendingCheckouts.delete(key);
     }
   }
-  ensurePendingCheckoutTable().then(() => {
-    prisma.$executeRawUnsafe(`DELETE FROM "PendingCheckout" WHERE "expiresAt" <= NOW();`).catch((error) => {
-      console.error('Failed to purge expired pending checkouts:', error);
-    });
-  }).catch(() => {});
+  prisma.pendingCheckout.deleteMany({ where: { expiresAt: { lte: new Date() } } }).catch((error) => {
+    console.error('Failed to purge expired pending checkouts:', error);
+  });
 }, 30 * 60 * 1000);
 
 function normalizePhone(phone: unknown) {
@@ -756,12 +841,6 @@ function validateAccountAddress(data: any): { address: AccountAddressInput; erro
   return { address, errors };
 }
 
-function isMissingSavedAddressTableError(error: unknown) {
-  if (!error || typeof error !== 'object') return false;
-  const prismaError = error as { code?: string; meta?: { table?: string } };
-  return prismaError.code === 'P2021' && String(prismaError.meta?.table || '').includes('SavedAddress');
-}
-
 function normalizeProductLabel(value: unknown) {
   const label = String(value || '').trim().toLowerCase();
   return ['bestseller', 'new', 'premium'].includes(label) ? label : 'new';
@@ -769,7 +848,15 @@ function normalizeProductLabel(value: unknown) {
 
 function normalizeProductCategory(value: unknown) {
   const category = String(value || '').trim().toLowerCase().replace(/\s*\+\s*/g, '+');
-  return ['image', 'image+text', 'no customization'].includes(category) ? category : 'image';
+  return ['image', 'text', 'image+text', 'no customization'].includes(category) ? category : 'image';
+}
+
+function normalizeProductReviewCount(value: unknown) {
+  const reviews = Number(value ?? 0);
+  if (!Number.isInteger(reviews) || reviews < 0 || reviews > MAX_PRODUCT_REVIEW_COUNT) {
+    throw new Error(`Review count must be a whole number between 0 and ${MAX_PRODUCT_REVIEW_COUNT.toLocaleString()}.`);
+  }
+  return reviews;
 }
 
 function normalizeProductGallery(value: unknown, coverImage: string) {
@@ -777,6 +864,7 @@ function normalizeProductGallery(value: unknown, coverImage: string) {
   const addImage = (next: unknown, gallery: string[]) => {
     const image = String(next || '').trim();
     if (!image || seen.has(image)) return;
+    if (gallery.length >= 8) throw new Error('A product can have at most 8 gallery images.');
     seen.add(image);
     gallery.push(image);
   };
@@ -789,90 +877,28 @@ function normalizeProductGallery(value: unknown, coverImage: string) {
   return gallery;
 }
 
-let catalogCustomizationColumnsReady = false;
+type PreparedProductImages = {
+  image: string;
+  gallery: string[];
+};
 
-function isMissingCatalogCustomizationColumnError(error: unknown) {
-  if (!error || typeof error !== 'object') return false;
-  const prismaError = error as { code?: string; message?: string; meta?: { column?: string } };
-  const message = String(prismaError.message || '').toLowerCase();
-  const column = String(prismaError.meta?.column || '').toLowerCase();
-
-  return prismaError.code === 'P2022'
-    || column === 'label'
-    || column === 'gallery'
-    || column === 'customtext'
-    || message.includes('product.label')
-    || message.includes('product.gallery')
-    || message.includes('orderitem.customtext')
-    || message.includes('column "label" does not exist')
-    || message.includes('column "gallery" does not exist')
-    || message.includes('column "customtext" does not exist');
+function imageReference(value: unknown) {
+  const image = String(value || '').trim();
+  if (!image) throw new Error('A product cover image is required.');
+  if (image.length > 7 * 1024 * 1024) throw new Error('The product image reference is too large.');
+  if (image.startsWith('data:') && !SAFE_DATA_IMAGE_PATTERN.test(image)) {
+    throw new Error('Product images must be JPEG, PNG, or WebP.');
+  }
+  return image;
 }
 
-async function ensureCatalogCustomizationColumns() {
-  if (catalogCustomizationColumnsReady) return;
-
-  await prisma.$executeRawUnsafe(`ALTER TABLE "Product" ADD COLUMN IF NOT EXISTS "label" TEXT NOT NULL DEFAULT 'new';`);
-  await prisma.$executeRawUnsafe(`ALTER TABLE "Product" ADD COLUMN IF NOT EXISTS "gallery" TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[];`);
-  await prisma.$executeRawUnsafe(`UPDATE "Product" SET "gallery" = ARRAY["image"] WHERE cardinality("gallery") = 0 AND COALESCE("image", '') <> '';`);
-  await prisma.$executeRawUnsafe(`UPDATE "Product" SET "gallery" = ARRAY['/images/product/W1.png', '/images/product/W2.png', '/images/product/W3.png', '/images/product/W4.png', '/images/size.png'] WHERE "id" = 'ghibli-art-tote' AND cardinality("gallery") <= 1;`);
-  await prisma.$executeRawUnsafe(`UPDATE "Product" SET "gallery" = ARRAY['/images/product/W5.png', '/images/product/W6.png', '/images/product/W7.png', '/images/product/W8.png', '/images/size.png'] WHERE "id" = 'ghibli-text-tote' AND cardinality("gallery") <= 1;`);
-  await prisma.$executeRawUnsafe(`UPDATE "Product" SET "gallery" = ARRAY['/images/product/W9.png', '/images/product/W10.png', '/images/product/W11.png', '/images/product/W12.png', '/images/size.png'] WHERE "id" = 'emoji-ghibli-tote' AND cardinality("gallery") <= 1;`);
-  await prisma.$executeRawUnsafe(`UPDATE "Product" SET "gallery" = ARRAY['/images/product/W13.png', '/images/product/W14.png', '/images/product/W15.png', '/images/product/W16.png', '/images/size.png'] WHERE "id" = 'polaroid-tote' AND cardinality("gallery") <= 1;`);
-  await prisma.$executeRawUnsafe(`UPDATE "Product" SET "gallery" = ARRAY['/images/product/W17.png', '/images/product/W18.png', '/images/product/W19.png', '/images/product/W20.png', '/images/size.png'] WHERE "id" = 'any-design-tote' AND cardinality("gallery") <= 1;`);
-  await prisma.$executeRawUnsafe(`
-    UPDATE "Product"
-    SET "gallery" = array_replace("gallery", '/images/size.jpeg', '/images/size.png')
-    WHERE "id" IN ('ghibli-art-tote', 'ghibli-text-tote', 'emoji-ghibli-tote', 'polaroid-tote', 'any-design-tote')
-      AND '/images/size.jpeg' = ANY("gallery");
-  `);
-  await prisma.$executeRawUnsafe(`
-    UPDATE "Product"
-    SET "gallery" = array_append("gallery", '/images/size.png')
-    WHERE "id" IN ('ghibli-art-tote', 'ghibli-text-tote', 'emoji-ghibli-tote', 'polaroid-tote', 'any-design-tote')
-      AND NOT '/images/size.png' = ANY("gallery");
-  `);
-  await prisma.$executeRawUnsafe(`
-    UPDATE "Product"
-    SET "label" = lower("category")
-    WHERE lower("category") IN ('bestseller', 'new', 'premium');
-  `);
-  await prisma.$executeRawUnsafe(`
-    UPDATE "Product"
-    SET "category" = CASE
-      WHEN lower("category") = 'no customization' OR "isCustomizable" = false THEN 'no customization'
-      WHEN lower("category") = 'image + text' OR lower("category") = 'image+text' THEN 'image+text'
-      WHEN lower("name") LIKE '%text%' OR lower("name") LIKE '%emoji%' OR lower("description") LIKE '%text%' THEN 'image+text'
-      ELSE 'image'
-    END
-    WHERE lower("category") NOT IN ('image', 'image+text', 'no customization');
-  `);
-  await prisma.$executeRawUnsafe(`UPDATE "Product" SET "isCustomizable" = "category" <> 'no customization';`);
-  await prisma.$executeRawUnsafe(`ALTER TABLE "OrderItem" ADD COLUMN IF NOT EXISTS "customText" TEXT;`);
-
-  catalogCustomizationColumnsReady = true;
-}
-
-async function ensureSavedAddressTable() {
-  await prisma.$executeRawUnsafe(`
-    CREATE TABLE IF NOT EXISTS "SavedAddress" (
-      "id" TEXT NOT NULL,
-      "email" TEXT NOT NULL,
-      "nickname" TEXT NOT NULL,
-      "firstName" TEXT NOT NULL,
-      "lastName" TEXT NOT NULL,
-      "phone" TEXT NOT NULL,
-      "address" TEXT NOT NULL,
-      "city" TEXT NOT NULL,
-      "state" TEXT NOT NULL,
-      "zip" TEXT NOT NULL,
-      "isDefault" BOOLEAN NOT NULL DEFAULT false,
-      "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-      "updatedAt" TIMESTAMP(3) NOT NULL,
-      CONSTRAINT "SavedAddress_pkey" PRIMARY KEY ("id")
-    );
-  `);
-  await prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS "SavedAddress_email_idx" ON "SavedAddress"("email");`);
+function prepareProductImages(imageValue: unknown, galleryValue: unknown): PreparedProductImages {
+  const requestedCover = imageReference(imageValue);
+  const requestedGallery = normalizeProductGallery(galleryValue, requestedCover).map(imageReference);
+  // Product-image object migration is intentionally postponed. Preserve the
+  // existing data URL or URL exactly as supplied; no storage write is part of
+  // the release path.
+  return { image: requestedCover, gallery: requestedGallery };
 }
 
 async function saveAccountAddress(data: any) {
@@ -901,9 +927,27 @@ async function saveAccountAddress(data: any) {
   });
 }
 
-async function buildVerifiedCheckout(data: any): Promise<PendingCheckout> {
-  await ensureCatalogCustomizationColumns();
+function validateAdminProductInput(data: Record<string, unknown>) {
+  const name = String(data.name || '').trim();
+  const description = String(data.description || '').trim();
+  const price = Number(data.price);
+  const oldPrice = data.oldPrice === undefined || data.oldPrice === null || data.oldPrice === '' ? null : Number(data.oldPrice);
+  const inventoryCount = Number(data.inventoryCount ?? 0);
 
+  if (name.length < 2 || name.length > 160) throw new Error('Product name must be between 2 and 160 characters.');
+  if (description.length > 4_000) throw new Error('Product description must be at most 4,000 characters.');
+  if (!Number.isFinite(price) || price < 0 || price > 1_000_000) throw new Error('Product price must be between 0 and 1,000,000.');
+  if (oldPrice !== null && (!Number.isFinite(oldPrice) || oldPrice < price || oldPrice > 1_000_000)) {
+    throw new Error('Original price must be a valid amount no less than the current price.');
+  }
+  if (!Number.isInteger(inventoryCount) || inventoryCount < 0 || inventoryCount > 1_000_000) {
+    throw new Error('Inventory count must be a whole number between 0 and 1,000,000.');
+  }
+
+  return { name, description, price, oldPrice, inventoryCount };
+}
+
+async function buildVerifiedCheckout(data: any): Promise<PendingCheckout> {
   const { customer, errors } = validateCustomer(data);
   const incomingItems = Array.isArray(data.items) ? data.items : [];
   const accountUser = verifySessionToken(data.accountToken);
@@ -952,7 +996,7 @@ async function buildVerifiedCheckout(data: any): Promise<PendingCheckout> {
     }
     const category = normalizeProductCategory(product.category);
     const requiresImage = category === 'image' || category === 'image+text';
-    const requiresText = category === 'image+text';
+    const requiresText = category === 'text' || category === 'image+text';
 
     if (requiresImage && !hasAllCheckoutImages(item, quantity)) {
       errors.items = 'Please upload artwork for every custom tote before placing your order.';
@@ -1007,7 +1051,6 @@ interface CreateOrderOptions {
 }
 
 async function createOrderFromCheckout(checkout: PendingCheckout, options: CreateOrderOptions = {}) {
-  await ensureOrderPaymentColumns();
 
   const {
     razorpayOrderId,
@@ -1176,21 +1219,21 @@ async function verifyPaymentIsCaptured(razorpayOrderId: string, razorpayPaymentI
 // Deletes an order that was never actually paid (payment failed / abandoned)
 // and restores the inventory units it had reserved at creation time.
 async function deleteOrderAndRestoreInventory(orderId: string) {
-  const order = await prisma.order.findUnique({
-    where: { id: orderId },
-    include: { items: true },
-  });
-  if (!order) return;
-
-  for (const item of order.items) {
-    await prisma.product.updateMany({
-      where: { id: item.productId },
-      data: { inventoryCount: { increment: item.quantity } },
-    });
-  }
-
   try {
-    await prisma.order.delete({ where: { id: order.id } });
+    await prisma.$transaction(async (tx) => {
+      // Delete first inside this transaction. A concurrent cleanup that loses
+      // the delete race gets P2025 and cannot restore inventory a second time.
+      const order = await tx.order.delete({
+        where: { id: orderId },
+        include: { items: true },
+      });
+      for (const item of order.items) {
+        await tx.product.updateMany({
+          where: { id: item.productId },
+          data: { inventoryCount: { increment: item.quantity } },
+        });
+      }
+    });
   } catch (error: any) {
     if (error?.code !== 'P2025') throw error; // already gone is fine
   }
@@ -1216,8 +1259,14 @@ function gokwikAuthMiddleware(req: Request, res: Response, next: NextFunction) {
 // --- Routes ---
 
 // Health Check
-app.get('/api/health', (_req, res) => {
-  res.json({ status: 'ok' });
+app.get('/api/health', async (_req, res) => {
+  try {
+    await prisma.$queryRaw(Prisma.sql`SELECT 1`);
+    res.json({ status: 'ok', database: 'connected' });
+  } catch (error) {
+    console.error('Health check database query failed:', error);
+    res.status(503).json({ status: 'unavailable', database: 'unavailable' });
+  }
 });
 
 app.post('/api/auth/google', rateLimit({ windowMs: 15 * 60 * 1000, max: 30, keyPrefix: 'auth-google' }), async (req, res) => {
@@ -1255,18 +1304,35 @@ app.get('/api/account/orders', async (req, res) => {
       where: {
         customerEmail: {
           equals: user.email,
-          mode: 'insensitive',
+          mode: 'insensitive' as const,
         },
       },
-      include: {
+      select: {
+        id: true, displayId: true, paymentStatus: true, paidAmount: true, codBalance: true,
+        subtotal: true, shipping: true, total: true, status: true, createdAt: true,
         items: {
-          include: { product: true },
+          select: {
+            id: true, productId: true, quantity: true, priceAtPurchase: true, customText: true,
+            product: { select: { id: true, name: true, image: true } },
+          },
         },
       },
       orderBy: { createdAt: 'desc' },
     });
 
-    res.json(orders);
+    // Historical product images can be legacy Base64 values. Do not send those
+    // large payloads with account history; the card still shows a thumbnail
+    // when the catalog uses a path or hosted URL.
+    res.json(orders.map((order) => ({
+      ...order,
+      items: order.items.map((item) => ({
+        ...item,
+        product: item.product && {
+          ...item.product,
+          image: item.product.image.startsWith('data:') ? null : item.product.image,
+        },
+      })),
+    })));
   } catch (error) {
     console.error('Failed to fetch account orders:', error);
     res.status(500).json({ error: 'Failed to fetch account orders.' });
@@ -1283,12 +1349,7 @@ app.delete('/api/account/data', async (req, res) => {
     const emailFilter = { equals: user.email, mode: 'insensitive' as const };
 
     const orders = await prisma.order.deleteMany({ where: { customerEmail: emailFilter } });
-    let addresses = { count: 0 };
-    try {
-      addresses = await prisma.savedAddress.deleteMany({ where: { email: emailFilter } });
-    } catch (error) {
-      if (!isMissingSavedAddressTableError(error)) throw error;
-    }
+    const addresses = await prisma.savedAddress.deleteMany({ where: { email: emailFilter } });
 
     res.json({
       message: 'All your data has been permanently deleted.',
@@ -1306,17 +1367,10 @@ app.get('/api/account/addresses', async (req, res) => {
     const user = requireAuthUser(req, res);
     if (!user) return;
 
-    let addresses: Awaited<ReturnType<typeof prisma.savedAddress.findMany>>;
-    try {
-      addresses = await prisma.savedAddress.findMany({
-        where: { email: user.email },
-        orderBy: [{ isDefault: 'desc' }, { updatedAt: 'desc' }],
-      });
-    } catch (error) {
-      if (!isMissingSavedAddressTableError(error)) throw error;
-      await ensureSavedAddressTable();
-      addresses = [];
-    }
+    const addresses = await prisma.savedAddress.findMany({
+      where: { email: user.email },
+      orderBy: [{ isDefault: 'desc' }, { updatedAt: 'desc' }],
+    });
     res.json(addresses);
   } catch (error) {
     console.error('Failed to fetch saved addresses:', error);
@@ -1329,14 +1383,7 @@ app.post('/api/account/addresses', async (req, res) => {
     const user = requireAuthUser(req, res);
     if (!user) return;
 
-    let address: Awaited<ReturnType<typeof saveAccountAddress>>;
-    try {
-      address = await saveAccountAddress({ ...req.body, email: user.email });
-    } catch (error) {
-      if (!isMissingSavedAddressTableError(error)) throw error;
-      await ensureSavedAddressTable();
-      address = await saveAccountAddress({ ...req.body, email: user.email });
-    }
+    const address = await saveAccountAddress({ ...req.body, email: user.email });
     res.status(201).json(address);
   } catch (error: any) {
     if (error.details) {
@@ -1358,14 +1405,7 @@ app.put('/api/account/addresses/:id', async (req, res) => {
       return res.status(400).json({ error: 'Please correct the highlighted details.', details: errors });
     }
 
-    let existing: Awaited<ReturnType<typeof prisma.savedAddress.findUnique>>;
-    try {
-      existing = await prisma.savedAddress.findUnique({ where: { id: addressId } });
-    } catch (error) {
-      if (!isMissingSavedAddressTableError(error)) throw error;
-      await ensureSavedAddressTable();
-      existing = null;
-    }
+    const existing = await prisma.savedAddress.findUnique({ where: { id: addressId } });
     if (!existing || existing.email !== user.email) {
       return res.status(404).json({ error: 'Address not found.' });
     }
@@ -1397,14 +1437,7 @@ app.delete('/api/account/addresses/:id', async (req, res) => {
     if (!user) return;
     const addressId = routeParam(req.params.id);
 
-    let existing: Awaited<ReturnType<typeof prisma.savedAddress.findUnique>>;
-    try {
-      existing = await prisma.savedAddress.findUnique({ where: { id: addressId } });
-    } catch (error) {
-      if (!isMissingSavedAddressTableError(error)) throw error;
-      await ensureSavedAddressTable();
-      existing = null;
-    }
+    const existing = await prisma.savedAddress.findUnique({ where: { id: addressId } });
     if (!existing || existing.email !== user.email) {
       return res.status(404).json({ error: 'Address not found.' });
     }
@@ -1516,7 +1549,9 @@ app.post('/api/checkout/verify-razorpay', rateLimit({ windowMs: 15 * 60 * 1000, 
       .update(`${razorpay_order_id}|${razorpay_payment_id}`)
       .digest('hex');
 
-    if (expectedSignature !== razorpay_signature) {
+    const receivedSignature = String(razorpay_signature);
+    if (!/^[a-f0-9]{64}$/i.test(receivedSignature)
+      || !crypto.timingSafeEqual(Buffer.from(expectedSignature, 'hex'), Buffer.from(receivedSignature, 'hex'))) {
       return res.status(400).json({ error: 'Payment verification failed.' });
     }
 
@@ -1548,10 +1583,9 @@ app.post('/api/checkout/verify-razorpay', rateLimit({ windowMs: 15 * 60 * 1000, 
         razorpayPaymentId: razorpay_payment_id,
         paymentStatus: 'pending',
       });
-      // Keep the pending checkout so the webhook / reconciliation can still
-      // upgrade or clean up this order. The customer already paid on Razorpay,
-      // so the frontend shows the success screen regardless.
-      return res.status(201).json({
+      // Keep the checkout so the webhook / reconciliation can still upgrade
+      // or clean it up. The browser must show a pending state, not success.
+      return res.status(202).json({
         order: pendingOrder,
         paidNow: 0,
         codBalance: 0,
@@ -1594,7 +1628,7 @@ app.post('/api/checkout/verify-razorpay', rateLimit({ windowMs: 15 * 60 * 1000, 
     });
   } catch (error: any) {
     console.error('Failed to verify Razorpay payment:', error);
-    res.status(500).json({ error: error.message || 'Failed to place order.' });
+    res.status(500).json({ error: 'Failed to verify payment. Please check your order status before trying again.' });
   }
 });
 
@@ -1609,18 +1643,20 @@ app.post('/api/webhooks/razorpay',
     if (!rawBody || rawBody.length === 0) return res.status(400).json({ error: 'Empty webhook body.' });
 
     if (!RAZORPAY_WEBHOOK_SECRET) {
-      // Webhook not configured in the dashboard → nothing to verify securely.
-      console.warn('Razorpay webhook received, but RAZORPAY_WEBHOOK_SECRET is not set. Ignoring.');
-      return res.status(200).json({ received: true, skipped: true });
+      console.error('Razorpay webhook received, but RAZORPAY_WEBHOOK_SECRET is not configured.');
+      return res.status(503).json({ error: 'Webhook processing is not configured.' });
     }
 
     const signature = req.headers['x-razorpay-signature'] as string | undefined;
     if (!signature) return res.status(400).json({ error: 'Missing signature.' });
 
     const expected = crypto.createHmac('sha256', RAZORPAY_WEBHOOK_SECRET).update(rawBody).digest('hex');
-    const received = Buffer.from(String(signature), 'hex');
+    if (!/^[a-f0-9]{64}$/i.test(signature)) {
+      return res.status(400).json({ error: 'Webhook signature mismatch.' });
+    }
+    const received = Buffer.from(signature, 'hex');
     const computed = Buffer.from(expected, 'hex');
-    if (!crypto.timingSafeEqual(received, computed)) {
+    if (received.length !== computed.length || !crypto.timingSafeEqual(received, computed)) {
       return res.status(400).json({ error: 'Webhook signature mismatch.' });
     }
 
@@ -1828,7 +1864,7 @@ async function reconcilePaidPayments() {
     console.log('Reconciliation deleted pending order (no captured payment):', order.id);
   }
 }
-setInterval(reconcilePaidPayments, RECONCILE_INTERVAL_MS);
+const reconcileInterval = setInterval(reconcilePaidPayments, RECONCILE_INTERVAL_MS);
 reconcilePaidPayments().catch(() => {});
 
 // --- GoKwik Cart API Endpoints ---
@@ -2180,35 +2216,316 @@ app.post('/gokwik/v1/cart/remove-out-of-stock-items', gokwikAuthMiddleware, (_re
 
 // --- Product Routes ---
 
-app.get('/api/products', async (_req, res) => {
+const productCategoryInclude = {
+  categoryLinks: {
+    include: { category: { select: { id: true, name: true, slug: true, coverImage: true } } },
+  },
+} as const;
+const adminProductSelect = {
+  id: true,
+  name: true,
+  description: true,
+  price: true,
+  oldPrice: true,
+  image: true,
+  gallery: true,
+  isCustomizable: true,
+  label: true,
+  category: true,
+  inventoryCount: true,
+  createdAt: true,
+  updatedAt: true,
+  categoryLinks: productCategoryInclude.categoryLinks,
+} satisfies Prisma.ProductSelect;
+const publicProductCardSelect = {
+  id: true,
+  name: true,
+  price: true,
+  oldPrice: true,
+  image: true,
+  isCustomizable: true,
+  label: true,
+  category: true,
+} satisfies Prisma.ProductSelect;
+const PRODUCT_PAGE_SIZE = 12;
+const MAX_PRODUCT_PAGE_SIZE = 48;
+const MAX_PAGE_NUMBER = 10_000;
+const ORDER_PAGE_SIZE = 25;
+const MAX_ORDER_PAGE_SIZE = 100;
+
+type Pagination = {
+  page: number;
+  pageSize: number;
+  total: number;
+  totalPages: number;
+  hasNextPage: boolean;
+  hasPreviousPage: boolean;
+};
+
+function productCard(product: {
+  id: string; name: string; price: number; oldPrice: number | null; image: string;
+  isCustomizable: boolean; label: string; category: string; reviews?: number;
+}) {
+  return {
+    id: product.id,
+    name: product.name,
+    price: product.price,
+    oldPrice: product.oldPrice,
+    image: product.image,
+    isCustomizable: product.isCustomizable,
+    label: product.label,
+    category: product.category,
+    reviews: Number.isInteger(product.reviews) && (product.reviews || 0) >= 0 ? product.reviews : 0,
+  };
+}
+
+function paginationFromQuery(query: Request['query'], defaults: { pageSize: number; maxPageSize: number }) {
+  const rawPage = query.page;
+  const rawPageSize = query.pageSize;
+  const parsePositiveInteger = (value: unknown, name: string, fallback: number) => {
+    if (value === undefined) return fallback;
+    if (Array.isArray(value) || !/^\d+$/.test(String(value))) throw new Error(`${name} must be a positive integer.`);
+    const parsed = Number(value);
+    if (!Number.isSafeInteger(parsed) || parsed < 1) throw new Error(`${name} must be a positive integer.`);
+    return parsed;
+  };
+  const page = parsePositiveInteger(rawPage, 'page', 1);
+  if (page > MAX_PAGE_NUMBER) throw new Error(`page must be ${MAX_PAGE_NUMBER} or fewer.`);
+  const requestedPageSize = parsePositiveInteger(rawPageSize, 'pageSize', defaults.pageSize);
+  if (requestedPageSize > defaults.maxPageSize) throw new Error(`pageSize must be ${defaults.maxPageSize} or fewer.`);
+  return { page, pageSize: requestedPageSize };
+}
+
+function paginationMetadata(page: number, pageSize: number, total: number): Pagination {
+  const totalPages = Math.max(1, Math.ceil(total / pageSize));
+  return { page, pageSize, total, totalPages, hasNextPage: page < totalPages, hasPreviousPage: page > 1 };
+}
+
+function productListWhere(query: Request['query']): Prisma.ProductWhereInput {
+  const where: Prisma.ProductWhereInput = {};
+  const term = query.search ?? query.q;
+  if (term !== undefined) {
+    if (Array.isArray(term)) throw new Error('search must be a single value.');
+    const search = String(term).trim();
+    if (search.length > 100) throw new Error('search must be 100 characters or fewer.');
+    if (search) where.OR = [{ name: { contains: search, mode: 'insensitive' } }, { description: { contains: search, mode: 'insensitive' } }];
+  }
+
+  const category = query.category;
+  if (category !== undefined) {
+    if (Array.isArray(category)) throw new Error('category must be a single value.');
+    const value = String(category).trim().toLowerCase();
+    if (value === 'uncategorized') where.categoryLinks = { none: {} };
+    else if (value) where.categoryLinks = { some: { category: { slug: value } } };
+  }
+
+  const availability = query.availability;
+  if (availability !== undefined) {
+    if (availability !== 'all' && availability !== 'in-stock') throw new Error('availability must be all or in-stock.');
+    if (availability === 'in-stock') where.inventoryCount = { gt: 0 };
+  }
+
+  const rawIds = query.ids;
+  if (rawIds !== undefined) {
+    if (Array.isArray(rawIds)) throw new Error('ids must be a comma-separated value.');
+    const ids = String(rawIds).split(',').map((id) => id.trim()).filter(Boolean);
+    if (!ids.length || ids.length > MAX_PRODUCT_PAGE_SIZE || ids.some((id) => id.length > 100)) throw new Error(`ids must contain between 1 and ${MAX_PRODUCT_PAGE_SIZE} product IDs.`);
+    where.id = { in: [...new Set(ids)] };
+  }
+  return where;
+}
+
+function productListOrder(query: Request['query']): Prisma.ProductOrderByWithRelationInput[] {
+  const sort = query.sort === undefined ? 'newest' : query.sort;
+  if (Array.isArray(sort)) throw new Error('sort must be a single value.');
+  switch (sort) {
+    case 'newest': return [{ createdAt: 'desc' }, { id: 'asc' }];
+    case 'oldest': return [{ createdAt: 'asc' }, { id: 'asc' }];
+    case 'price-asc': return [{ price: 'asc' }, { id: 'asc' }];
+    case 'price-desc': return [{ price: 'desc' }, { id: 'asc' }];
+    case 'name-asc': return [{ name: 'asc' }, { id: 'asc' }];
+    default: throw new Error('sort must be newest, oldest, price-asc, price-desc, or name-asc.');
+  }
+}
+
+// Public category navigation and detail routes. The slug is deliberately
+// stable after creation; a rename changes only the display name.
+app.get('/api/categories', async (_req, res) => {
   try {
-    await ensureCatalogCustomizationColumns();
-    let products;
-    try {
-      products = await prisma.product.findMany({
-        orderBy: { createdAt: 'asc' }
-      });
-    } catch (error) {
-      if (!isMissingCatalogCustomizationColumnError(error)) throw error;
-      await ensureCatalogCustomizationColumns();
-      products = await prisma.product.findMany({
-        orderBy: { createdAt: 'asc' }
-      });
+    const categories = await prisma.category.findMany({
+      orderBy: { name: 'asc' },
+      include: { _count: { select: { productLinks: true } } },
+    });
+    res.json(categories.map(categorySummary));
+  } catch (error) {
+    console.error('Failed to fetch categories:', error);
+    res.status(500).json({ error: 'Failed to fetch categories.' });
+  }
+});
+
+app.get('/api/categories/:slug', async (req, res) => {
+  try {
+    const slug = routeParam(req.params.slug).toLowerCase();
+    const { page, pageSize } = paginationFromQuery(req.query, { pageSize: PRODUCT_PAGE_SIZE, maxPageSize: MAX_PRODUCT_PAGE_SIZE });
+    const category = await prisma.category.findUnique({
+      where: { slug },
+      include: { _count: { select: { productLinks: true } } },
+    });
+    if (!category) return res.status(404).json({ error: 'Category not found.' });
+    const [total, productLinks] = await prisma.$transaction([
+      prisma.productCategory.count({ where: { categoryId: category.id } }),
+      prisma.productCategory.findMany({
+        where: { categoryId: category.id },
+        orderBy: [{ product: { createdAt: 'desc' } }, { productId: 'asc' }],
+        skip: (page - 1) * pageSize,
+        take: pageSize,
+        include: { product: { select: publicProductCardSelect } },
+      }),
+    ]);
+    res.setHeader('Cache-Control', 'no-store');
+    res.json({
+      ...categorySummary(category),
+      // Category pages render the same compact cards as the catalog. Do not
+      // include descriptions, galleries, assignments, or admin-only fields.
+      products: productLinks.map((link) => productCard(link.product)),
+      pagination: paginationMetadata(page, pageSize, total),
+    });
+  } catch (error) {
+    console.error('Failed to fetch category:', error);
+    res.status(500).json({ error: 'Failed to fetch category.' });
+  }
+});
+
+app.post('/api/categories', requireAdmin, async (req, res) => {
+  try {
+    const name = normalizeCategoryName(req.body?.name);
+    const duplicate = await prisma.category.findFirst({ where: { name: { equals: name, mode: 'insensitive' } }, select: { id: true } });
+    if (duplicate) return res.status(409).json({ error: 'A category with this name already exists.' });
+    const coverImage = await uploadCategoryImage(req.body?.imageData);
+    const slug = await getAvailableCategorySlug(name);
+    const category = await prisma.category.create({ data: { name, slug, coverImage }, include: { _count: { select: { productLinks: true } } } });
+    io.emit('categories_updated');
+    res.status(201).json(categorySummary(category));
+  } catch (error: any) {
+    const status = error?.status || (error?.code === 'P2002' ? 409 : 400);
+    console.error('Failed to create category:', error);
+    res.status(status).json({ error: error?.message || 'Failed to create category.' });
+  }
+});
+
+app.put('/api/categories/:id', requireAdmin, async (req, res) => {
+  try {
+    const id = routeParam(req.params.id);
+    const existing = await prisma.category.findUnique({ where: { id } });
+    if (!existing) return res.status(404).json({ error: 'Category not found.' });
+    const name = normalizeCategoryName(req.body?.name);
+    const duplicate = await prisma.category.findFirst({ where: { name: { equals: name, mode: 'insensitive' }, NOT: { id } }, select: { id: true } });
+    if (duplicate) return res.status(409).json({ error: 'A category with this name already exists.' });
+    const coverImage = req.body?.imageData ? await uploadCategoryImage(req.body.imageData) : existing.coverImage;
+    const category = await prisma.category.update({
+      where: { id },
+      data: { name, coverImage },
+      include: { _count: { select: { productLinks: true } } },
+    });
+    if (coverImage !== existing.coverImage) await removeCategoryImage(existing.coverImage);
+    io.emit('categories_updated');
+    res.json(categorySummary(category));
+  } catch (error: any) {
+    const status = error?.status || (error?.code === 'P2002' ? 409 : 400);
+    console.error('Failed to update category:', error);
+    res.status(status).json({ error: error?.message || 'Failed to update category.' });
+  }
+});
+
+app.delete('/api/categories/:id', requireAdmin, async (req, res) => {
+  try {
+    const id = routeParam(req.params.id);
+    const category = await prisma.category.findUnique({ where: { id }, select: { id: true, coverImage: true } });
+    if (!category) return res.status(404).json({ error: 'Category not found.' });
+    // The join FK cascades only assignments; products and historical order data remain untouched.
+    await prisma.category.delete({ where: { id } });
+    await removeCategoryImage(category.coverImage);
+    io.emit('categories_updated');
+    io.emit('products_updated');
+    res.json({ success: true, id });
+  } catch (error) {
+    console.error('Failed to delete category:', error);
+    res.status(500).json({ error: 'Failed to delete category.' });
+  }
+});
+
+app.get('/api/products', async (req, res) => {
+  try {
+    if (req.query.include !== undefined) {
+      return res.status(400).json({ error: 'Product galleries are available only from /api/products/:id.' });
     }
-    res.json(sanitizeProductsForResponse(products));
+    const { page, pageSize } = paginationFromQuery(req.query, { pageSize: PRODUCT_PAGE_SIZE, maxPageSize: MAX_PRODUCT_PAGE_SIZE });
+    const where = productListWhere(req.query);
+    const orderBy = productListOrder(req.query);
+    const [total, products] = await prisma.$transaction([
+      prisma.product.count({ where }),
+      prisma.product.findMany({
+        where,
+        orderBy,
+        skip: (page - 1) * pageSize,
+        take: pageSize,
+        select: publicProductCardSelect,
+      }),
+    ]);
+    // Product prices and inventory must never be shared from a stale public
+    // cache. The client has an in-flight GET de-duplicator instead.
+    res.setHeader('Cache-Control', 'no-store');
+    res.json({
+      items: products.map(productCard),
+      pagination: paginationMetadata(page, pageSize, total),
+    });
   } catch (error) {
     console.error("Failed to fetch products:", error);
-    res.json(FALLBACK_PRODUCTS);
+    const message = error instanceof Error ? error.message : 'Product catalog is temporarily unavailable. Please try again.';
+    const status = /must be|pageSize|search|sort|availability|category|ids/.test(message) ? 400 : 503;
+    res.status(status).json({ error: status === 400 ? message : 'Product catalog is temporarily unavailable. Please try again.' });
+  }
+});
+
+// Inventory, category assignments, and the full product gallery are admin
+// data. Keep the broader list behind the existing admin token rather than
+// exposing it through a public query parameter.
+app.get('/api/admin/products', requireAdmin, async (req, res) => {
+  try {
+    const { page, pageSize } = paginationFromQuery(req.query, { pageSize: 24, maxPageSize: MAX_PRODUCT_PAGE_SIZE });
+    const where = productListWhere(req.query);
+    const orderBy = productListOrder(req.query);
+    const [total, products] = await prisma.$transaction([
+      prisma.product.count({ where }),
+      prisma.product.findMany({
+        where,
+        orderBy,
+        skip: (page - 1) * pageSize,
+        take: pageSize,
+        select: adminProductSelect,
+      }),
+    ]);
+    res.setHeader('Cache-Control', 'private, no-store');
+    res.json({ items: products.map(productWithCategoriesAndReviews), pagination: paginationMetadata(page, pageSize, total) });
+  } catch (error) {
+    console.error('Failed to fetch admin products:', error);
+    res.status(400).json({ error: error instanceof Error ? error.message : 'Failed to fetch products.' });
   }
 });
 
 app.get('/api/products/:id', async (req, res) => {
   try {
-    await ensureCatalogCustomizationColumns();
     const productId = routeParam(req.params.id);
-    const product = await prisma.product.findUnique({ where: { id: productId } });
+    const product = await prisma.product.findUnique({
+      where: { id: productId },
+      select: {
+        id: true, name: true, description: true, price: true, oldPrice: true,
+        image: true, gallery: true, isCustomizable: true, label: true, category: true,
+        categoryLinks: productCategoryInclude.categoryLinks,
+      },
+    });
     if (!product) return res.status(404).json({ error: "Product not found" });
-    res.json(sanitizeProductForResponse(product));
+    res.json(productWithCategoriesAndReviews(product));
   } catch (error) {
     console.error("Failed to fetch product:", error);
     const product = FALLBACK_PRODUCTS.find((fallbackProduct) => fallbackProduct.id === routeParam(req.params.id));
@@ -2219,67 +2536,90 @@ app.get('/api/products/:id', async (req, res) => {
 
 app.post('/api/products', requireAdmin, async (req, res) => {
   try {
-    await ensureCatalogCustomizationColumns();
-    const data = req.body;
+    const data = req.body || {};
+    const values = validateAdminProductInput(data);
+    const categoryIds = await validatedCategoryIds(data.categoryIds);
     const category = normalizeProductCategory(data.category);
-    const image = String(data.image || '/images/product_mockup.png').trim() || '/images/product_mockup.png';
-    const product = await prisma.product.create({
-      data: {
-        name: data.name,
-        description: data.description || '',
-        price: data.price,
-        oldPrice: data.oldPrice || null,
-        image,
-        gallery: normalizeProductGallery(data.gallery, image),
-        isCustomizable: category !== 'no customization',
-        label: normalizeProductLabel(data.label || data.category),
-        category,
-        inventoryCount: data.inventoryCount || 0,
-      }
+    const reviews = normalizeProductReviewCount(data.reviews);
+    const images = prepareProductImages(data.image || '/images/product_mockup.png', data.gallery);
+    const product = await prisma.$transaction(async (tx) => {
+      const created = await tx.product.create({
+        data: {
+          name: values.name,
+          description: values.description,
+          price: values.price,
+          oldPrice: values.oldPrice,
+          image: images!.image,
+          gallery: images!.gallery,
+          isCustomizable: category !== 'no customization',
+          label: normalizeProductLabel(data.label || data.category),
+          category,
+          inventoryCount: values.inventoryCount,
+          ...(categoryIds ? { categoryLinks: { create: categoryIds.map((categoryId) => ({ categoryId })) } } : {}),
+        },
+        include: productCategoryInclude,
+      });
+      await tx.$executeRawUnsafe('UPDATE "Product" SET "reviews" = $1 WHERE "id" = $2', reviews, created.id);
+      return created;
     });
     io.emit("products_updated");
-    res.status(201).json(product);
-  } catch (error) {
+    io.emit("categories_updated");
+    res.status(201).json({ ...productWithCategories(product), reviews });
+  } catch (error: any) {
     console.error("Failed to create product:", error);
-    res.status(500).json({ error: "Failed to create product" });
+    res.status(error?.status || (error?.code === 'P2002' ? 409 : 400)).json({ error: error?.message || "Failed to create product" });
   }
 });
 
 app.put('/api/products/:id', requireAdmin, async (req, res) => {
   try {
-    await ensureCatalogCustomizationColumns();
     const productId = routeParam(req.params.id);
-    const data = req.body;
+    const data = req.body || {};
+    const values = validateAdminProductInput(data);
+    const existing = await prisma.product.findUnique({ where: { id: productId }, select: { id: true, image: true, gallery: true } });
+    if (!existing) return res.status(404).json({ error: 'Product not found' });
+    const categoryIds = await validatedCategoryIds(data.categoryIds);
     const category = normalizeProductCategory(data.category);
-    const image = String(data.image || '/images/product_mockup.png').trim() || '/images/product_mockup.png';
-    const product = await prisma.product.update({
-      where: { id: productId },
-      data: {
-        name: data.name,
-        description: data.description || '',
-        price: data.price,
-        oldPrice: data.oldPrice || null,
-        image,
-        gallery: normalizeProductGallery(data.gallery, image),
-        isCustomizable: category !== 'no customization',
-        label: normalizeProductLabel(data.label || data.category),
-        category,
-        inventoryCount: data.inventoryCount || 0,
-      }
+    const reviews = normalizeProductReviewCount(data.reviews);
+    const images = prepareProductImages(data.image || existing.image, data.gallery === undefined ? existing.gallery : data.gallery);
+    const product = await prisma.$transaction(async (tx) => {
+      const updated = await tx.product.update({
+        where: { id: productId },
+        data: {
+          name: values.name,
+          description: values.description,
+          price: values.price,
+          oldPrice: values.oldPrice,
+          image: images!.image,
+          gallery: images!.gallery,
+          isCustomizable: category !== 'no customization',
+          label: normalizeProductLabel(data.label || data.category),
+          category,
+          inventoryCount: values.inventoryCount,
+          ...(categoryIds !== undefined ? { categoryLinks: { deleteMany: {}, create: categoryIds.map((categoryId) => ({ categoryId })) } } : {}),
+        },
+        include: productCategoryInclude,
+      });
+      await tx.$executeRawUnsafe('UPDATE "Product" SET "reviews" = $1 WHERE "id" = $2', reviews, updated.id);
+      return updated;
     });
     io.emit("products_updated");
-    res.json(product);
-  } catch (error) {
+    io.emit("categories_updated");
+    res.json({ ...productWithCategories(product), reviews });
+  } catch (error: any) {
     console.error("Failed to update product:", error);
-    res.status(500).json({ error: "Failed to update product" });
+    res.status(error?.status || (error?.code === 'P2002' ? 409 : 400)).json({ error: error?.message || "Failed to update product" });
   }
 });
 
 app.delete('/api/products/:id', requireAdmin, async (req, res) => {
   try {
     const productId = routeParam(req.params.id);
+    const existing = await prisma.product.findUnique({ where: { id: productId }, select: { image: true, gallery: true } });
+    if (!existing) return res.status(404).json({ error: 'Product not found' });
     await prisma.product.delete({ where: { id: productId } });
     io.emit("products_updated");
+    io.emit("categories_updated");
     res.json({ success: true, id: productId });
   } catch (error) {
     console.error("Failed to delete product:", error);
@@ -2289,20 +2629,27 @@ app.delete('/api/products/:id', requireAdmin, async (req, res) => {
 
 // --- Order Routes ---
 
-app.get('/api/orders', requireAdmin, async (_req, res) => {
+app.get('/api/orders', requireAdmin, async (req, res) => {
   try {
-    const orders = await prisma.order.findMany({
+    const { page, pageSize } = paginationFromQuery(req.query, { pageSize: ORDER_PAGE_SIZE, maxPageSize: MAX_ORDER_PAGE_SIZE });
+    const [total, orders] = await prisma.$transaction([
+      prisma.order.count(),
+      prisma.order.findMany({
       include: {
         items: {
-          include: { product: true }
+          include: { product: { select: { id: true, name: true, image: true } } }
         }
       },
-      orderBy: { createdAt: 'desc' }
-    });
-    res.json(orders);
+      orderBy: [{ createdAt: 'desc' }, { id: 'asc' }],
+      skip: (page - 1) * pageSize,
+      take: pageSize,
+    }),
+    ]);
+    res.setHeader('Cache-Control', 'private, no-store');
+    res.json({ items: orders, pagination: paginationMetadata(page, pageSize, total) });
   } catch (error) {
     console.error("Failed to fetch orders:", error);
-    res.status(500).json({ error: "Failed to fetch orders" });
+    res.status(400).json({ error: error instanceof Error ? error.message : 'Failed to fetch orders' });
   }
 });
 
@@ -2367,14 +2714,19 @@ app.put('/api/orders/:id', requireAdmin, async (req, res) => {
 app.delete('/api/orders/:id', requireAdmin, async (req, res) => {
   try {
     const orderId = routeParam(req.params.id);
-    await prisma.orderItem.deleteMany({ where: { orderId } });
-    await prisma.order.delete({ where: { id: orderId } });
+    await prisma.$transaction(async (tx) => {
+      const order = await tx.order.delete({ where: { id: orderId }, include: { items: true } });
+      for (const item of order.items) {
+        await tx.product.updateMany({ where: { id: item.productId }, data: { inventoryCount: { increment: item.quantity } } });
+      }
+    });
 
     io.emit("order_deleted", orderId);
     res.json({ success: true, id: orderId });
   } catch (error) {
     console.error("Failed to delete order:", error);
-    res.status(500).json({ error: "Failed to delete order" });
+    const status = (error as { code?: string }).code === 'P2025' ? 404 : 500;
+    res.status(status).json({ error: status === 404 ? 'Order not found.' : 'Failed to delete order' });
   }
 });
 
@@ -2463,7 +2815,28 @@ app.get('/api/admin/orders', requireAdmin, async (_req, res) => {
 httpServer.listen(port, () => {
   console.log(`Backend server running on port ${port} with Socket.IO enabled`);
   console.log(`GoKwik environment: ${process.env.GOKWIK_ENV || 'not set'}`);
-  // Ensure the payment columns exist on the shared DB before admin reads hit them.
-  ensureOrderPaymentColumns().catch(() => {});
-  ensurePendingCheckoutTable().catch(() => {});
 });
+
+let shuttingDown = false;
+async function shutdown(signal: string) {
+  if (shuttingDown) return;
+  shuttingDown = true;
+  console.log(`${signal} received; closing server connections.`);
+  clearInterval(rateLimitCleanupInterval);
+  clearInterval(checkoutCleanupInterval);
+  clearInterval(reconcileInterval);
+  io.close();
+  httpServer.close(async () => {
+    try {
+      await prisma.$disconnect();
+      process.exit(0);
+    } catch (error) {
+      console.error('Failed to disconnect Prisma during shutdown:', error);
+      process.exit(1);
+    }
+  });
+  setTimeout(() => process.exit(1), 10_000).unref();
+}
+
+process.once('SIGTERM', () => { void shutdown('SIGTERM'); });
+process.once('SIGINT', () => { void shutdown('SIGINT'); });

@@ -5,6 +5,7 @@ generator client {
 datasource db {
   provider  = "postgresql"
   url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
 }
 
 model Product {
@@ -19,9 +20,36 @@ model Product {
   label          String      @default("new")
   category       String
   inventoryCount Int         @default(0)
+  reviews        Int         @default(0)
   createdAt      DateTime    @default(now())
   updatedAt      DateTime    @updatedAt
   orderItems     OrderItem[]
+  categoryLinks  ProductCategory[]
+}
+
+model Category {
+  id        String            @id @default(cuid())
+  name      String
+  slug      String            @unique
+  coverImage String
+  createdAt DateTime          @default(now())
+  updatedAt DateTime          @updatedAt
+  productLinks ProductCategory[]
+
+  @@unique([name])
+  @@index([createdAt])
+}
+
+model ProductCategory {
+  productId  String
+  categoryId String
+  createdAt  DateTime @default(now())
+
+  product  Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  category Category @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+
+  @@id([productId, categoryId])
+  @@index([categoryId])
 }
 
 model Order {
@@ -53,7 +81,7 @@ model Order {
 
 model PendingCheckout {
   id          String    @id
-  data        String
+  data        Json
   createdAt   DateTime  @default(now())
   expiresAt   DateTime
   processedAt DateTime?

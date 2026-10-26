@@ -116,9 +116,11 @@ export function CustomerStories() {
             >
               {selectedStory.type === "image" && (
                 <div className="relative w-full h-full max-h-[85vh] flex justify-center">
-                  <img 
-                    src={selectedStory.src} 
+                  <Image
+                    src={selectedStory.src}
                     alt="Customer Review" 
+                    fill
+                    sizes="(max-width: 768px) 100vw, 896px"
                     className="w-auto h-auto max-w-full max-h-[85vh] object-contain rounded-xl"
                   />
                 </div>

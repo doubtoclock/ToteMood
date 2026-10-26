@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useRef, useLayoutEffect, useMemo } from "react";
+import React, { useRef, useMemo } from "react";
 import { Canvas, useFrame, useThree, useGraph } from "@react-three/fiber";
 import { useGLTF, useTexture, ContactShadows } from "@react-three/drei";
 import * as THREE from "three";
@@ -88,7 +88,7 @@ function ScrollToteModel({
     return t;
   }, [texture, gl]);
 
-  const shaderRef = useRef<any>(null);
+  const shaderRef = useRef<THREE.WebGLProgramParametersWithUniforms | null>(null);
 
   const artworkMaterial = useMemo(() => {
     const mat = materials.Artwork_Material.clone();
@@ -151,7 +151,7 @@ function ScrollToteModel({
 
     mat.needsUpdate = true;
     return mat;
-  }, [materials.Artwork_Material, texture]);
+  }, [materials.Artwork_Material, clonedTexture]);
 
   const blackBagMaterial = useMemo(() => {
     const mat = materials.Bag_Material.clone();

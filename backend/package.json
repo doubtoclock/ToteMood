@@ -8,11 +8,17 @@
     "dev": "npx tsx watch src/index.ts",
     "seed": "npx tsx src/seed.ts",
     "postinstall": "npx prisma generate",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "test:category-storage": "npx tsx tests/category-storage.integration.ts",
+    "test:product-image-storage": "npx tsx tests/product-image-storage.unit.ts",
+    "migration:images:dry-run": "npx tsx src/migrate-product-images.ts"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
+  "engines": {
+    "node": ">=20.9 <25"
+  },
   "type": "commonjs",
   "dependencies": {
     "@prisma/client": "^5.22.0",

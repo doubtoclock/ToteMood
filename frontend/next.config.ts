@@ -11,7 +11,7 @@ const csp = [
   "frame-ancestors 'none'",
   "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://accounts.google.com https://checkout.razorpay.com https://static.cloudflareinsights.com https://connect.facebook.net",
   "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://api.fontshare.com",
-  "img-src 'self' data: blob: https://lh3.googleusercontent.com https://www.totemood.com https://www.facebook.com",
+  "img-src 'self' data: blob: https://lh3.googleusercontent.com https://*.supabase.co https://www.totemood.com https://www.facebook.com",
   "font-src 'self' data: https://fonts.gstatic.com https://api.fontshare.com",
   `connect-src 'self' ${apiOrigin} ${apiOrigin.replace(/^http/, "ws")} https://accounts.google.com https://api.razorpay.com https://www.gstatic.com https://connect.facebook.net https://www.facebook.com blob:`,
   "frame-src https://accounts.google.com https://api.razorpay.com https://checkout.razorpay.com",
@@ -26,6 +26,10 @@ const nextConfig: NextConfig = {
       {
         protocol: "https",
         hostname: "lh3.googleusercontent.com",
+      },
+      {
+        protocol: "https",
+        hostname: "**.supabase.co",
       },
     ],
   },

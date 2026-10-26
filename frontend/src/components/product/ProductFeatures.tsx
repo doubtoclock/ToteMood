@@ -1,6 +1,6 @@
 import { Droplets, ShieldCheck, Feather } from "lucide-react";
 
-export function ProductFeatures({ productName }: { productName: string }) {
+export function ProductFeatures() {
   return (
     <section className="pt-8 pb-20 md:pb-24 border-b border-[#E8E5DC]">
       <div className="container mx-auto px-6 lg:px-12 max-w-[1200px]">
@@ -32,7 +32,7 @@ export function ProductFeatures({ productName }: { productName: string }) {
             </div>
             <h3 className="text-[16px] font-extrabold text-[#B55E5B] uppercase tracking-widest mb-2">Your Design, Your Approval</h3>
             <p className="text-[15px] text-[#686B59] leading-[1.6]">
-              Create your design your way, we'll share it with you on WhatsApp for approval before we start printing.
+              Create your design your way, we&apos;ll share it with you on WhatsApp for approval before we start printing.
             </p>
           </div>
 

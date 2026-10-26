@@ -3,8 +3,8 @@
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { LayoutDashboard, Package, ShoppingBag, LogOut, Lock } from "lucide-react";
-import { ADMIN_PATH, ADMIN_ROUTE } from "@/lib/admin-route";
+import { LayoutDashboard, Package, ShoppingBag, LogOut, Lock, Tags } from "lucide-react";
+import { ADMIN_PATH } from "@/lib/admin-route";
 import { API_BASE_URL, ADMIN_SESSION_EXPIRED_EVENT } from "@/lib/api";
 
 export default function AdminLayout({
@@ -20,19 +20,21 @@ export default function AdminLayout({
 
   useEffect(() => {
     const auth = localStorage.getItem("totemood_admin_auth");
-    if (auth === "true" && localStorage.getItem("totemood_admin_token")) {
-      setIsAuthenticated(true);
-    } else {
+    const authenticated = auth === "true" && Boolean(localStorage.getItem("totemood_admin_token"));
+    if (!authenticated) {
       localStorage.removeItem("totemood_admin_auth");
-      setIsAuthenticated(false);
     }
+    const authTimer = window.setTimeout(() => setIsAuthenticated(authenticated), 0);
     // A rejected/expired token clears the session and lands the user back here
     const onExpired = () => {
       setIsAuthenticated(false);
       setError("Session expired. Please sign in again.");
     };
     window.addEventListener(ADMIN_SESSION_EXPIRED_EVENT, onExpired);
-    return () => window.removeEventListener(ADMIN_SESSION_EXPIRED_EVENT, onExpired);
+    return () => {
+      window.clearTimeout(authTimer);
+      window.removeEventListener(ADMIN_SESSION_EXPIRED_EVENT, onExpired);
+    };
   }, []);
 
   const handleLogin = async (e: React.FormEvent) => {
@@ -69,6 +71,7 @@ export default function AdminLayout({
   const navigation = [
     { name: "Dashboard", href: ADMIN_PATH, icon: LayoutDashboard },
     { name: "Products", href: `${ADMIN_PATH}/products`, icon: Package },
+    { name: "Collections", href: `${ADMIN_PATH}/categories`, icon: Tags },
     { name: "Orders", href: `${ADMIN_PATH}/orders`, icon: ShoppingBag },
   ];
 
