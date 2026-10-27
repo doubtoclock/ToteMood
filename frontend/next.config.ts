@@ -4,6 +4,10 @@ const apiOrigin = process.env.NEXT_PUBLIC_API_URL
   ? new URL(process.env.NEXT_PUBLIC_API_URL).origin
   : "http://localhost:4010";
 
+// `upgrade-insecure-requests` would force phone browsers on a plain-HTTP LAN
+// dev address to fetch CSS/JS over HTTPS, where the dev server has no TLS.
+const isProduction = process.env.NODE_ENV === "production";
+
 const csp = [
   "default-src 'self'",
   "base-uri 'self'",
@@ -17,7 +21,7 @@ const csp = [
   "frame-src https://accounts.google.com https://api.razorpay.com https://checkout.razorpay.com",
   "worker-src 'self' blob:",
   "form-action 'self'",
-  "upgrade-insecure-requests",
+  ...(isProduction ? ["upgrade-insecure-requests"] : []),
 ].join("; ");
 
 const nextConfig: NextConfig = {

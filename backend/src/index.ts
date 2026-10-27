@@ -2233,6 +2233,7 @@ const adminProductSelect = {
   label: true,
   category: true,
   inventoryCount: true,
+  reviews: true,
   createdAt: true,
   updatedAt: true,
   categoryLinks: productCategoryInclude.categoryLinks,
@@ -2247,7 +2248,7 @@ const publicProductCardSelect = {
   label: true,
   category: true,
 } satisfies Prisma.ProductSelect;
-const PRODUCT_PAGE_SIZE = 12;
+const PRODUCT_PAGE_SIZE = 6;
 const MAX_PRODUCT_PAGE_SIZE = 48;
 const MAX_PAGE_NUMBER = 10_000;
 const ORDER_PAGE_SIZE = 25;
@@ -2542,29 +2543,26 @@ app.post('/api/products', requireAdmin, async (req, res) => {
     const category = normalizeProductCategory(data.category);
     const reviews = normalizeProductReviewCount(data.reviews);
     const images = prepareProductImages(data.image || '/images/product_mockup.png', data.gallery);
-    const product = await prisma.$transaction(async (tx) => {
-      const created = await tx.product.create({
-        data: {
-          name: values.name,
-          description: values.description,
-          price: values.price,
-          oldPrice: values.oldPrice,
-          image: images!.image,
-          gallery: images!.gallery,
-          isCustomizable: category !== 'no customization',
-          label: normalizeProductLabel(data.label || data.category),
-          category,
-          inventoryCount: values.inventoryCount,
-          ...(categoryIds ? { categoryLinks: { create: categoryIds.map((categoryId) => ({ categoryId })) } } : {}),
-        },
-        include: productCategoryInclude,
-      });
-      await tx.$executeRawUnsafe('UPDATE "Product" SET "reviews" = $1 WHERE "id" = $2', reviews, created.id);
-      return created;
+    const product = await prisma.product.create({
+      data: {
+        name: values.name,
+        description: values.description,
+        price: values.price,
+        oldPrice: values.oldPrice,
+        image: images!.image,
+        gallery: images!.gallery,
+        isCustomizable: category !== 'no customization',
+        label: normalizeProductLabel(data.label || data.category),
+        category,
+        inventoryCount: values.inventoryCount,
+        reviews,
+        ...(categoryIds ? { categoryLinks: { create: categoryIds.map((categoryId) => ({ categoryId })) } } : {}),
+      },
+      include: productCategoryInclude,
     });
     io.emit("products_updated");
     io.emit("categories_updated");
-    res.status(201).json({ ...productWithCategories(product), reviews });
+    res.status(201).json(productWithCategoriesAndReviews(product));
   } catch (error: any) {
     console.error("Failed to create product:", error);
     res.status(error?.status || (error?.code === 'P2002' ? 409 : 400)).json({ error: error?.message || "Failed to create product" });
@@ -2582,30 +2580,27 @@ app.put('/api/products/:id', requireAdmin, async (req, res) => {
     const category = normalizeProductCategory(data.category);
     const reviews = normalizeProductReviewCount(data.reviews);
     const images = prepareProductImages(data.image || existing.image, data.gallery === undefined ? existing.gallery : data.gallery);
-    const product = await prisma.$transaction(async (tx) => {
-      const updated = await tx.product.update({
-        where: { id: productId },
-        data: {
-          name: values.name,
-          description: values.description,
-          price: values.price,
-          oldPrice: values.oldPrice,
-          image: images!.image,
-          gallery: images!.gallery,
-          isCustomizable: category !== 'no customization',
-          label: normalizeProductLabel(data.label || data.category),
-          category,
-          inventoryCount: values.inventoryCount,
-          ...(categoryIds !== undefined ? { categoryLinks: { deleteMany: {}, create: categoryIds.map((categoryId) => ({ categoryId })) } } : {}),
-        },
-        include: productCategoryInclude,
-      });
-      await tx.$executeRawUnsafe('UPDATE "Product" SET "reviews" = $1 WHERE "id" = $2', reviews, updated.id);
-      return updated;
+    const product = await prisma.product.update({
+      where: { id: productId },
+      data: {
+        name: values.name,
+        description: values.description,
+        price: values.price,
+        oldPrice: values.oldPrice,
+        image: images!.image,
+        gallery: images!.gallery,
+        isCustomizable: category !== 'no customization',
+        label: normalizeProductLabel(data.label || data.category),
+        category,
+        inventoryCount: values.inventoryCount,
+        reviews,
+        ...(categoryIds !== undefined ? { categoryLinks: { deleteMany: {}, create: categoryIds.map((categoryId) => ({ categoryId })) } } : {}),
+      },
+      include: productCategoryInclude,
     });
     io.emit("products_updated");
     io.emit("categories_updated");
-    res.json({ ...productWithCategories(product), reviews });
+    res.json(productWithCategoriesAndReviews(product));
   } catch (error: any) {
     console.error("Failed to update product:", error);
     res.status(error?.status || (error?.code === 'P2002' ? 409 : 400)).json({ error: error?.message || "Failed to update product" });

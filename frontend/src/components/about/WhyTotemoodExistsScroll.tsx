@@ -45,7 +45,6 @@ export function WhyTotemoodExistsScroll() {
                   alt="Siya Maurya Original" 
                   fill 
                   className="object-cover object-top"
-                  sizes="(max-width: 768px) 100vw, 400px"
                 />
               </div>
 

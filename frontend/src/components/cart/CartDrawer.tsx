@@ -92,6 +92,7 @@ export function CartDrawer() {
                           src={item.product.image} 
                           alt={item.product.name}
                           fill
+                          sizes="92px"
                           className="object-cover mix-blend-multiply"
                         />
                       </div>

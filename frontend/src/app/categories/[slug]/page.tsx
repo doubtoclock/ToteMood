@@ -19,13 +19,19 @@ export default function CategoryPage() {
   const [category, setCategory] = useState<CategoryDetail | null>(null);
   const [state, setState] = useState<"loading" | "ready" | "missing" | "error">("loading");
   const [page, setPage] = useState(1);
+  const [activeSlug, setActiveSlug] = useState(slug);
   const addItem = useCartStore((store) => store.addItem);
+
+  if (slug !== activeSlug) {
+    setActiveSlug(slug);
+    setPage(1);
+  }
 
   useEffect(() => {
     let active = true;
     void Promise.resolve().then(() => {
       if (active) setState("loading");
-      return apiFetch<CategoryDetail>(`/api/categories/${encodeURIComponent(slug)}?page=${page}&pageSize=12`);
+      return apiFetch<CategoryDetail>(`/api/categories/${encodeURIComponent(slug)}?page=${page}&pageSize=6`);
     })
       .then((result) => {
         if (!active) return;

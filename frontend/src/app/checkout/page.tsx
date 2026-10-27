@@ -722,7 +722,7 @@ export default function CheckoutPage() {
                     <div className="flex gap-4">
                       <div className="relative shrink-0">
                         <div className="w-[92px] h-[92px] rounded-[12px] bg-[#F5F3EC] overflow-hidden border border-[#E8E5DC] relative">
-                          <Image src={item.product.image} alt={item.product.name} fill className="object-cover mix-blend-multiply" />
+                          <Image src={item.product.image} alt={item.product.name} fill sizes="92px" className="object-cover mix-blend-multiply" />
                         </div>
                         <span className="absolute -top-2 -right-2 w-[22px] h-[22px] bg-[#686B59] text-white text-[11px] font-bold flex items-center justify-center rounded-full z-10 shadow-sm border-2 border-white">
                           {item.quantity}
@@ -753,7 +753,7 @@ export default function CheckoutPage() {
                                 <div className="bg-[#FAF9F8] rounded-[12px] p-4 border border-[#E8E5DC] flex items-center justify-between">
                                   <div className="flex items-center gap-3">
                                     <div className="w-[48px] h-[48px] rounded-[8px] overflow-hidden relative border border-[#E8E5DC] bg-white">
-                                      <Image src={uploadedImage} alt="Uploaded preview" fill className="object-cover" />
+                                      <Image src={uploadedImage} alt="Uploaded preview" fill sizes="92px" className="object-cover" />
                                     </div>
                                     <div className="flex flex-col">
                                       <span className="text-[13px] font-medium text-[#252A1A] flex items-center gap-1.5">

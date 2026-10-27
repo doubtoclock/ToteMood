@@ -15,7 +15,7 @@ import { offerSignInIfSignedOut } from "@/lib/store/useSignInPrompt";
 
 export default function ShopPage() {
   const [page, setPage] = useState(1);
-  const { products, loading, error, pagination, refetch } = useProducts({ page, pageSize: 12 });
+  const { products, loading, error, pagination, refetch } = useProducts({ page, pageSize: 6 });
   const addItem = useCartStore((state) => state.addItem);
 
   return (

@@ -28,7 +28,7 @@ export function MobileMenu({ isOpen, onClose }: MobileMenuProps) {
   const hydrateAuth = useAuthStore((state) => state.hydrate);
   const signOut = useAuthStore((state) => state.signOut);
   const { categories, loading: categoriesLoading } = useCategories();
-  const [categoriesOpen, setCategoriesOpen] = useState(false);
+  const [collectionsOpen, setCollectionsOpen] = useState(false);
 
   useEffect(() => {
     if (isOpen) {
@@ -81,16 +81,56 @@ export function MobileMenu({ isOpen, onClose }: MobileMenuProps) {
               </button>
             </div>
             
-            <nav className="flex-1 flex flex-col justify-center space-y-10">
+            <nav className="flex-1 overflow-y-auto py-4">
+              <div className="flex min-h-full flex-col justify-center space-y-8">
               {[
                 { name: "Home", href: "/" },
-                { name: "Shop", href: "/shop" },
+                { name: "Collections", href: "" },
                 { name: "Stories", href: "/#stories" },
                 { name: "About", href: "/about" }
               ].map((item, i) => {
                 const isAnchor = item.href.includes("#");
                 const className = "inline-block font-heading text-4xl md:text-5xl font-medium tracking-tight text-foreground transition-opacity hover:opacity-70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring";
-                
+
+                if (item.name === "Collections") {
+                  return (
+                    <motion.div
+                      key={item.name}
+                      initial={{ opacity: 0, y: 10 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ delay: 0.1 + i * 0.1, duration: 0.4 }}
+                    >
+                      <button
+                        type="button"
+                        onClick={() => setCollectionsOpen((open) => !open)}
+                        aria-expanded={collectionsOpen}
+                        className="flex w-full items-center justify-between font-heading text-4xl md:text-5xl font-medium tracking-tight text-foreground transition-opacity hover:opacity-70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                      >
+                        Collections
+                        <ChevronDown className={`h-7 w-7 shrink-0 transition-transform ${collectionsOpen ? "rotate-180" : ""}`} />
+                      </button>
+                      {collectionsOpen && (
+                        <div className="mt-3 space-y-1 border-l border-border pl-4">
+                          {categoriesLoading ? (
+                            <p className="py-2 font-heading text-4xl md:text-5xl font-medium tracking-tight text-secondary-foreground">Loading…</p>
+                          ) : categories.length === 0 ? (
+                            <p className="py-2 font-heading text-4xl md:text-5xl font-medium tracking-tight text-secondary-foreground">Coming soon</p>
+                          ) : categories.map((category) => (
+                            <Link
+                              key={category.id}
+                              href={`/categories/${category.slug}`}
+                              onClick={onClose}
+                              className="block py-2 font-heading text-4xl md:text-5xl font-medium tracking-tight text-foreground hover:opacity-70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                            >
+                              {category.name}
+                            </Link>
+                          ))}
+                        </div>
+                      )}
+                    </motion.div>
+                  );
+                }
+
                 return (
                   <motion.div
                     key={item.name}
@@ -115,12 +155,7 @@ export function MobileMenu({ isOpen, onClose }: MobileMenuProps) {
                   </motion.div>
                 );
               })}
-              <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.5, duration: 0.4 }}>
-                <button type="button" onClick={() => setCategoriesOpen((open) => !open)} aria-expanded={categoriesOpen} className="flex w-full items-center justify-between font-heading text-4xl font-medium tracking-tight text-foreground transition-opacity hover:opacity-70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
-                  Collections <ChevronDown className={`h-6 w-6 transition-transform ${categoriesOpen ? "rotate-180" : ""}`} />
-                </button>
-                {categoriesOpen && <div className="mt-4 max-h-44 space-y-1 overflow-y-auto rounded-xl border border-border bg-white/50 p-2">{categoriesLoading ? <p className="px-3 py-2 text-sm text-secondary-foreground">Loading collections…</p> : categories.length === 0 ? <p className="px-3 py-2 text-sm text-secondary-foreground">Collections are coming soon.</p> : categories.map((category) => <Link key={category.id} href={`/categories/${category.slug}`} onClick={onClose} className="block rounded-lg px-3 py-2 font-sans text-base font-medium text-foreground hover:bg-[#F5F3EC] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">{category.name}</Link>)}</div>}
-              </motion.div>
+              </div>
             </nav>
             
             <div className="pb-8 flex flex-col space-y-6">

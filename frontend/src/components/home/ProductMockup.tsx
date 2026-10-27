@@ -59,6 +59,7 @@ export function ProductMockup() {
               fill
               className="object-contain object-center"
               priority
+              sizes="100vw"
             />
           </div>
         </div>
@@ -125,6 +126,7 @@ export function ProductMockup() {
               fill
               className="object-contain object-center"
               priority
+              sizes="100vw"
             />
           </div>
         </motion.div>

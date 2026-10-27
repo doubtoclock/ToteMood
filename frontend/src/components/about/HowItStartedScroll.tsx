@@ -35,7 +35,6 @@ export function HowItStartedScroll() {
                     alt="Original Photo" 
                     fill 
                     className="object-cover object-top"
-                    sizes="(max-width: 768px) 100vw, 400px"
                   />
                 </div>
 

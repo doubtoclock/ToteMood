@@ -28,6 +28,7 @@ export function Navbar() {
   );
   const hydrateAuth = useAuthStore((state) => state.hydrate);
   const { toggleCart, getItemCount } = useCartStore();
+  const [cartHydrated, setCartHydrated] = useState(false);
   const { scrollY } = useScroll();
   const pathname = usePathname();
   const { categories, loading: categoriesLoading } = useCategories();
@@ -44,6 +45,10 @@ export function Navbar() {
       window.removeEventListener(ACCOUNT_AUTH_CHANGED_EVENT, onStorage);
     };
   }, [hydrateAuth]);
+
+  useEffect(() => {
+    setCartHydrated(true);
+  }, []);
 
   useEffect(() => {
     const closeOnOutsideClick = (event: MouseEvent) => {
@@ -103,13 +108,32 @@ export function Navbar() {
           <nav className="hidden md:flex flex-1 justify-center space-x-10 lg:space-x-14">
             {[
               { name: "Home", href: "/" },
-              { name: "Shop", href: "/shop" },
+              { name: "Collections", href: "" },
               { name: "Stories", href: "/#stories" },
               { name: "About", href: "/about" },
               { name: "Contact", href: "/contact" },
             ].map((item) => {
               const isAnchor = item.href.includes("#");
               const className = "font-sans text-[13px] lg:text-[14px] uppercase tracking-[0.2em] font-medium text-[#1C1C1A]/80 hover:text-[#1C1C1A] transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[#1C1C1A] rounded-sm px-2 py-1";
+
+              if (item.name === "Collections") {
+                return (
+                  <div key={item.name} ref={categoryMenuRef} className="relative">
+                    <button type="button" aria-haspopup="menu" aria-expanded={categoriesOpen} onClick={() => setCategoriesOpen((open) => !open)} className="flex items-center gap-1 font-sans text-[13px] lg:text-[14px] uppercase tracking-[0.2em] font-medium text-[#1C1C1A]/80 hover:text-[#1C1C1A] transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[#1C1C1A] rounded-sm px-2 py-1">
+                      Collections <ChevronDown className={`h-3.5 w-3.5 transition-transform ${categoriesOpen ? "rotate-180" : ""}`} />
+                    </button>
+                    {categoriesOpen && (
+                      <div role="menu" className="absolute left-1/2 top-full mt-3 w-72 -translate-x-1/2 rounded-2xl border border-[#E8E5DC] bg-white p-2 shadow-xl">
+                        {categoriesLoading ? <p className="px-3 py-3 text-sm text-[#686B59]">Loading collections…</p> : categories.length === 0 ? <p className="px-3 py-3 text-sm text-[#686B59]">Collections are coming soon.</p> : categories.map((category) => (
+                          <Link role="menuitem" key={category.id} href={`/categories/${category.slug}`} onClick={() => setCategoriesOpen(false)} className="flex items-center gap-3 rounded-xl px-2 py-2 text-sm font-medium text-[#252A1A] hover:bg-[#F5F3EC] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#757D5C]">
+                            <span className="relative h-10 w-10 shrink-0 overflow-hidden rounded-lg bg-[#F5F3EC]"><Image src={category.coverImage} alt="" fill sizes="40px" className="object-cover" /></span><span className="min-w-0 truncate">{category.name}</span>
+                          </Link>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                );
+              }
 
               return (
                 <Link
@@ -130,20 +154,6 @@ export function Navbar() {
                 </Link>
               );
             })}
-            <div ref={categoryMenuRef} className="relative">
-              <button type="button" aria-haspopup="menu" aria-expanded={categoriesOpen} onClick={() => setCategoriesOpen((open) => !open)} className="flex items-center gap-1 font-sans text-[13px] lg:text-[14px] uppercase tracking-[0.2em] font-medium text-[#1C1C1A]/80 hover:text-[#1C1C1A] transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[#1C1C1A] rounded-sm px-2 py-1">
-                Collections <ChevronDown className={`h-3.5 w-3.5 transition-transform ${categoriesOpen ? "rotate-180" : ""}`} />
-              </button>
-              {categoriesOpen && (
-                <div role="menu" className="absolute left-1/2 top-full mt-3 w-72 -translate-x-1/2 rounded-2xl border border-[#E8E5DC] bg-white p-2 shadow-xl">
-                  {categoriesLoading ? <p className="px-3 py-3 text-sm text-[#686B59]">Loading collections…</p> : categories.length === 0 ? <p className="px-3 py-3 text-sm text-[#686B59]">Collections are coming soon.</p> : categories.map((category) => (
-                    <Link role="menuitem" key={category.id} href={`/categories/${category.slug}`} onClick={() => setCategoriesOpen(false)} className="flex items-center gap-3 rounded-xl px-2 py-2 text-sm font-medium text-[#252A1A] hover:bg-[#F5F3EC] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#757D5C]">
-                      <span className="relative h-10 w-10 shrink-0 overflow-hidden rounded-lg bg-[#F5F3EC]"><Image src={category.coverImage} alt="" fill sizes="40px" className="object-cover" /></span><span className="min-w-0 truncate">{category.name}</span>
-                    </Link>
-                  ))}
-                </div>
-              )}
-            </div>
           </nav>
 
           {/* Right: Actions */}
@@ -210,7 +220,7 @@ export function Navbar() {
               className="relative text-primary hover:text-primary/70 transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary rounded-sm p-1"
             >
               <ShoppingBag className="h-5 w-5" strokeWidth={1.5} />
-              {getItemCount() > 0 && (
+              {cartHydrated && getItemCount() > 0 && (
                 <span className="absolute -top-1 -right-1 flex h-4 w-4 items-center justify-center rounded-full bg-[#1C1C1A] text-[9px] font-medium text-white">
                   {getItemCount()}
                 </span>
