@@ -118,9 +118,9 @@ export default function AdminLayout({
   }
 
   return (
-    <div className="min-h-screen bg-[#F8F6EF] flex">
+    <div className="flex h-[100dvh] overflow-hidden bg-[#F8F6EF]">
       {/* Sidebar */}
-      <aside className="w-64 bg-white border-r border-[#1C1C1A]/10 flex flex-col fixed inset-y-0 z-10">
+      <aside className="w-64 bg-white border-r border-[#1C1C1A]/10 flex flex-col shrink-0">
         <div className="p-6 border-b border-[#1C1C1A]/10">
           <Link href="/" className="text-2xl font-serif text-[#1C1C1A] tracking-tighter hover:opacity-80 transition-opacity">
             Tote<span className="italic font-light">Mood</span>
@@ -160,7 +160,7 @@ export default function AdminLayout({
       </aside>
 
       {/* Main Content */}
-      <main className="flex-1 ml-64 min-w-0">
+      <main data-admin-scroll className="flex-1 min-w-0 h-full overflow-y-auto overscroll-contain">
         <div className="p-8 max-w-7xl mx-auto">
           {children}
         </div>

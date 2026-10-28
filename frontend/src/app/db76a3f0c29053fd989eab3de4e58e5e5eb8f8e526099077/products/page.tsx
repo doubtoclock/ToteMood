@@ -7,6 +7,7 @@ import { apiFetch, ENABLE_REALTIME, SOCKET_URL } from "@/lib/api";
 import { io } from "socket.io-client";
 import { compressImageForUpload } from "@/lib/imageCompression";
 import { useCategories } from "@/lib/useCategories";
+import { useBodyScrollLock } from "@/lib/useBodyScrollLock";
 
 interface AdminProduct {
   id: string;
@@ -16,6 +17,7 @@ interface AdminProduct {
   oldPrice?: number | null;
   image: string;
   gallery?: string[];
+  galleryCount?: number;
   isCustomizable: boolean;
   label: "bestseller" | "new" | "premium";
   category: string;
@@ -83,25 +85,28 @@ export default function AdminProducts() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isDragOver, setIsDragOver] = useState(false);
   const [isGalleryUploading, setIsGalleryUploading] = useState(false);
+  const [originalImages, setOriginalImages] = useState<{ image: string; gallery: string[] }>({ image: "", gallery: [] });
+  const [originalCategoryIds, setOriginalCategoryIds] = useState<string[]>([]);
   const coverFileInputRef = useRef<HTMLInputElement>(null);
   const galleryFileInputRef = useRef<HTMLInputElement>(null);
 
-  const fetchProducts = useCallback(() => {
-    setLoading(true);
+  useBodyScrollLock(isModalOpen);
+
+  const fetchProducts = useCallback((showSpinner = true) => {
+    if (showSpinner) setLoading(true);
     apiFetch<ProductListResponse>(`/api/admin/products?page=${page}&pageSize=24`)
       .then(data => {
         setProducts(data.items);
         setPagination(data.pagination);
-        setLoading(false);
       })
       .catch(err => {
         console.error(err);
-        setLoading(false);
-      });
+      })
+      .finally(() => setLoading(false));
   }, [page]);
 
   useEffect(() => {
-    void Promise.resolve().then(fetchProducts);
+    void Promise.resolve().then(() => fetchProducts(true));
     if (!ENABLE_REALTIME) return;
 
     const socket = io(SOCKET_URL, {
@@ -111,7 +116,9 @@ export default function AdminProducts() {
       transports: ["polling", "websocket"],
     });
     socket.on("connect_error", () => {});
-    socket.on("products_updated", fetchProducts);
+    // Refresh quietly so a save elsewhere does not replace the table with a
+    // full-page spinner.
+    socket.on("products_updated", () => fetchProducts(false));
     return () => {
       socket.disconnect();
     };
@@ -218,7 +225,9 @@ export default function AdminProducts() {
     setImage("");
     setImagePreview("");
     setGallery([]);
+    setOriginalImages({ image: "", gallery: [] });
     setSelectedCategoryIds([]);
+    setOriginalCategoryIds([]);
     setIsModalOpen(true);
   };
 
@@ -232,10 +241,13 @@ export default function AdminProducts() {
     setCategory(normalizeAdminCategory(product));
     setInventoryCount(product.inventoryCount.toString());
     setReviews(String(product.reviews ?? 0));
+    const productGallery = product.gallery && product.gallery.length > 0 ? product.gallery : [product.image].filter(Boolean);
     setImage(product.image);
     setImagePreview(product.image);
-    setGallery(product.gallery && product.gallery.length > 0 ? product.gallery : [product.image].filter(Boolean));
+    setGallery(productGallery);
+    setOriginalImages({ image: product.image, gallery: productGallery });
     setSelectedCategoryIds(product.categoryIds || []);
+    setOriginalCategoryIds(product.categoryIds || []);
     setIsModalOpen(true);
   };
 
@@ -256,8 +268,16 @@ export default function AdminProducts() {
     e.preventDefault();
     setIsSubmitting(true);
 
-    const coverImage = image || gallery[0] || "/images/product_mockup.png";
-    const payload = {
+    const imagesChanged = !editingProduct
+      || image !== originalImages.image
+      || gallery.length !== originalImages.gallery.length
+      || gallery.some((item, index) => item !== originalImages.gallery[index]);
+
+    const categoryIdsChanged = !editingProduct
+      || selectedCategoryIds.length !== originalCategoryIds.length
+      || selectedCategoryIds.some((id) => !originalCategoryIds.includes(id));
+
+    const payload: Record<string, unknown> = {
       name,
       description,
       price: parseFloat(price),
@@ -267,22 +287,28 @@ export default function AdminProducts() {
       inventoryCount: parseInt(inventoryCount, 10),
       reviews: parseInt(reviews || "0", 10),
       isCustomizable: category !== "no customization",
-      image: coverImage,
-      gallery: [coverImage, ...gallery.filter((item) => item !== coverImage)],
-      categoryIds: selectedCategoryIds,
+      // The backend keeps the existing links (and the row's categoryIds) when
+      // this is omitted, which is one less round trip on an unchanged save.
+      ...(categoryIdsChanged ? { categoryIds: selectedCategoryIds } : {}),
     };
 
-    if (payload.gallery.length > MAX_GALLERY_IMAGES) {
-      alert(`Please keep the gallery to ${MAX_GALLERY_IMAGES} images or fewer.`);
-      setIsSubmitting(false);
-      return;
-    }
-
-    if (estimateJsonBytes(payload) > PAYLOAD_WARNING_BYTES) {
-      const shouldContinue = confirm("This product has a large image gallery and may take longer to save. Continue?");
-      if (!shouldContinue) {
+    if (imagesChanged) {
+      const coverImage = image || gallery[0] || "/images/product_mockup.png";
+      const nextGallery = [coverImage, ...gallery.filter((item) => item !== coverImage)];
+      if (nextGallery.length > MAX_GALLERY_IMAGES) {
+        alert(`Please keep the gallery to ${MAX_GALLERY_IMAGES} images or fewer.`);
         setIsSubmitting(false);
         return;
+      }
+      payload.image = coverImage;
+      payload.gallery = nextGallery;
+
+      if (estimateJsonBytes(payload) > PAYLOAD_WARNING_BYTES) {
+        const shouldContinue = confirm("This product has a large image gallery and may take longer to save. Continue?");
+        if (!shouldContinue) {
+          setIsSubmitting(false);
+          return;
+        }
       }
     }
 
@@ -297,7 +323,7 @@ export default function AdminProducts() {
       });
       setIsModalOpen(false);
       if (editingProduct) {
-        setProducts((current) => current.map((product) => product.id === saved.id ? saved : product));
+        setProducts((current) => current.map((product) => product.id === saved.id ? { ...product, ...saved } : product));
       } else {
         if (page === 1) setProducts((current) => [saved, ...current].slice(0, 24));
         else setPage(1);
@@ -346,12 +372,12 @@ export default function AdminProducts() {
                 <td className="p-4">
                   <div className="flex items-center gap-4">
                     <div className="w-12 h-12 relative rounded-lg bg-[#EAECE3] overflow-hidden shrink-0 border border-[#1C1C1A]/5">
-                      <Image src={product.image} alt={product.name} fill className="object-cover" />
+                      <Image src={product.image} alt={product.name} fill sizes="48px" className="object-cover" />
                     </div>
                     <div>
                       <div className="font-bold text-[#1C1C1A]">{product.name}</div>
                       <div className="text-xs text-[#5A5A55]">
-                        {(product.label || "new").charAt(0).toUpperCase() + (product.label || "new").slice(1)} · {product.category} · {(product.gallery?.length || 1)} image{(product.gallery?.length || 1) === 1 ? "" : "s"}
+                        {(product.label || "new").charAt(0).toUpperCase() + (product.label || "new").slice(1)} · {product.category} · {(() => { const count = product.galleryCount ?? product.gallery?.length ?? 1; return `${count} image${count === 1 ? "" : "s"}`; })()}
                       </div>
                     </div>
                   </div>
@@ -418,7 +444,7 @@ export default function AdminProducts() {
       {/* Add/Edit Modal */}
       {isModalOpen && (
         <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto shadow-2xl">
+          <div className="bg-white rounded-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto overscroll-contain shadow-2xl">
             <div className="p-6 border-b border-[#1C1C1A]/10 flex justify-between items-center sticky top-0 bg-white z-10">
               <h2 className="text-2xl font-serif text-[#1C1C1A]">{editingProduct ? "Edit Product" : "Add Product"}</h2>
               <button onClick={() => setIsModalOpen(false)} className="p-2 hover:bg-[#F8F6EF] rounded-full text-[#5A5A55]">
@@ -483,7 +509,7 @@ export default function AdminProducts() {
                   </div>
                   <div>
                     <label className="text-xs font-bold uppercase tracking-widest text-[#5A5A55] block mb-2">Collections</label>
-                    <div className="max-h-40 overflow-y-auto rounded-xl border border-[#1C1C1A]/20 bg-white p-2">
+                    <div className="max-h-40 overflow-y-auto overscroll-contain rounded-xl border border-[#1C1C1A]/20 bg-white p-2">
                       {categoriesLoading ? <p className="flex items-center gap-2 px-2 py-2 text-xs text-[#5A5A55]"><Loader2 className="h-3.5 w-3.5 animate-spin" /> Loading collections…</p> : categories.length === 0 ? <p className="px-2 py-2 text-xs text-[#5A5A55]">No collections yet. Create one in Collections.</p> : categories.map((storeCategory) => {
                         const selected = selectedCategoryIds.includes(storeCategory.id);
                         return <label key={storeCategory.id} className="flex cursor-pointer items-center gap-2 rounded-lg px-2 py-2 text-sm text-[#1C1C1A] hover:bg-[#F8F6EF]"><input type="checkbox" checked={selected} onChange={() => setSelectedCategoryIds((current) => selected ? current.filter((id) => id !== storeCategory.id) : [...current, storeCategory.id])} className="h-4 w-4 accent-[#757D5C]" />{storeCategory.name}</label>;
@@ -514,7 +540,7 @@ export default function AdminProducts() {
                     >
                       {imagePreview ? (
                         <>
-                          <Image src={imagePreview} alt="Preview" fill className="object-contain p-2" />
+                          <Image src={imagePreview} alt="Preview" fill sizes="(max-width: 768px) 90vw, 512px" className="object-contain p-2" />
                           <div className="absolute inset-0 bg-black/0 hover:bg-black/10 transition-colors flex items-center justify-center opacity-0 hover:opacity-100">
                             <div className="bg-white rounded-full p-2 shadow-lg">
                               <Upload className="w-5 h-5 text-[#1C1C1A]" />
@@ -563,7 +589,7 @@ export default function AdminProducts() {
                     >
                       {gallery.map((galleryImage, index) => (
                         <div key={`${galleryImage}-${index}`} className="relative aspect-square overflow-hidden rounded-lg border border-[#1C1C1A]/10 bg-[#F8F6EF]">
-                          <Image src={galleryImage} alt={`Gallery image ${index + 1}`} fill className="object-contain p-1" />
+                          <Image src={galleryImage} alt={`Gallery image ${index + 1}`} fill sizes="(max-width: 768px) 22vw, 120px" className="object-contain p-1" />
                           <div className="absolute inset-x-1 bottom-1 flex justify-between gap-1">
                             <button
                               type="button"

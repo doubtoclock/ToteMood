@@ -167,6 +167,59 @@ app.use((req: Request, _res: Response, next: NextFunction) => {
 const prisma = new PrismaClient({
   datasources: { db: { url: getPrismaDatabaseUrl() } },
 });
+
+// The pooled Supabase endpoint occasionally drops idle/overloaded connections
+// and takes several seconds to open a new one. Reads are safe to retry, so
+// absorb those blips instead of surfacing a broken admin page.
+const RETRYABLE_DB_ERROR_CODES = new Set(['P1001', 'P1017', 'P2024']);
+const RETRYABLE_PRISMA_ACTIONS = new Set([
+  'findUnique',
+  'findUniqueOrThrow',
+  'findFirst',
+  'findFirstOrThrow',
+  'findMany',
+  'count',
+  'aggregate',
+  'groupBy',
+]);
+prisma.$use(async (params, next) => {
+  if (!RETRYABLE_PRISMA_ACTIONS.has(params.action)) return next(params);
+  for (let attempt = 0; ; attempt += 1) {
+    try {
+      return await next(params);
+    } catch (error) {
+      const code = (error as { code?: string } | null)?.code;
+      if (attempt >= 2 || !code || !RETRYABLE_DB_ERROR_CODES.has(code)) throw error;
+      const delayMs = attempt === 0 ? 500 : 1500;
+      console.warn(`Database ${params.model ?? 'query'}.${params.action} failed (${code}); retrying in ${delayMs}ms.`);
+      await new Promise((resolve) => setTimeout(resolve, delayMs));
+    }
+  }
+});
+
+async function warmDatabaseConnection() {
+  for (let attempt = 1; attempt <= 3; attempt += 1) {
+    try {
+      await prisma.$queryRaw`SELECT 1`;
+      console.log('Database connection ready.');
+      return;
+    } catch (error) {
+      const code = (error as { code?: string } | null)?.code;
+      console.warn(`Database warm-up attempt ${attempt} failed${code ? ` (${code})` : ''}.`);
+      await new Promise((resolve) => setTimeout(resolve, attempt * 1000));
+    }
+  }
+  console.warn('Database is not reachable yet; requests will keep retrying.');
+}
+
+void warmDatabaseConnection();
+// Keep one pooled connection hot so the first admin request after an idle
+// period does not pay the multi-second pooler handshake.
+const dbKeepAliveInterval = setInterval(() => {
+  void prisma.$queryRaw`SELECT 1`.catch(() => {});
+}, 60_000);
+dbKeepAliveInterval.unref();
+
 const ORDER_STATUSES = ['LIVE', 'MANIFESTED', 'SHIPPED', 'DD', 'DELIVER', 'RTO', 'CANCELLED', 'SHIP_LATER'] as const;
 type OrderStatusValue = typeof ORDER_STATUSES[number];
 
@@ -361,13 +414,14 @@ function categorySummary(category: { id: string; name: string; slug: string; cov
   };
 }
 
-async function validatedCategoryIds(value: unknown) {
+async function validatedCategoryIds(value: unknown, verifyDatabase = true) {
   if (value === undefined) return undefined;
   if (!Array.isArray(value) || value.some((id) => typeof id !== 'string' || !id.trim())) {
     throw new Error('Categories must be a list of category IDs.');
   }
   const ids = [...new Set(value.map((id) => id.trim()))];
   if (ids.length !== value.length) throw new Error('A category can only be selected once.');
+  if (ids.length === 0 || !verifyDatabase) return ids;
   const found = await prisma.category.findMany({ where: { id: { in: ids } }, select: { id: true } });
   if (found.length !== ids.length) throw new Error('One or more selected categories no longer exist.');
   return ids;
@@ -899,6 +953,196 @@ function prepareProductImages(imageValue: unknown, galleryValue: unknown): Prepa
   // existing data URL or URL exactly as supplied; no storage write is part of
   // the release path.
   return { image: requestedCover, gallery: requestedGallery };
+}
+
+// Product images live in the database as base64 data URLs. A pooled Supabase
+// connection from Southeast Asia to India moves only tens of kilobytes per
+// second and takes seconds per query, so returning full galleries from list
+// endpoints made every admin request take minutes. Instead, list responses
+// carry small proxy references and this process caches each product's decoded
+// images in memory after its first read.
+const DATA_IMAGE_PATTERN = /^data:(image\/(?:jpeg|jpg|png|webp));base64,([a-z0-9+/=]+)$/i;
+const PRODUCT_IMAGE_CACHE_MAX_BYTES = 96 * 1024 * 1024;
+
+type ProductImageRefs = {
+  image: string;
+  gallery: string[];
+  galleryCount: number;
+};
+
+const EMPTY_PRODUCT_IMAGE_REFS: ProductImageRefs = { image: '', gallery: [], galleryCount: 0 };
+// Keyed by product, image index, and row version so a product edit cannot
+// serve an old image under a new reference.
+const productImageCache = new Map<string, string>();
+const productImageValueLoads = new Map<string, Promise<string | null>>();
+const productImageSnapshotLoads = new Map<string, Promise<{ image: string; gallery: string[] } | null>>();
+let productImageCacheBytes = 0;
+
+function productImageCacheKey(productId: string, index: number, version: number) {
+  return `${productId}:${index}:${version}`;
+}
+
+function cacheProductImage(key: string, value: string) {
+  const existing = productImageCache.get(key);
+  if (existing !== undefined) {
+    productImageCacheBytes -= existing.length;
+    productImageCache.delete(key);
+  }
+  if (value.length > PRODUCT_IMAGE_CACHE_MAX_BYTES / 4) return;
+  productImageCache.set(key, value);
+  productImageCacheBytes += value.length;
+  for (const [cachedKey, cachedValue] of productImageCache) {
+    if (productImageCacheBytes <= PRODUCT_IMAGE_CACHE_MAX_BYTES) break;
+    productImageCache.delete(cachedKey);
+    productImageCacheBytes -= cachedValue.length;
+  }
+}
+
+function cachedProductImage(key: string) {
+  const value = productImageCache.get(key);
+  if (value === undefined) return null;
+  productImageCache.delete(key);
+  productImageCache.set(key, value);
+  return value;
+}
+
+// Read one image at a time. Loading the whole row per thumbnail made the
+// browser's first screen of covers download every full gallery.
+async function loadProductImageValue(productId: string, index: number, version: number): Promise<string | null> {
+  const key = productImageCacheKey(productId, index, version);
+  const cached = cachedProductImage(key);
+  if (cached !== null) return cached;
+  const pending = productImageValueLoads.get(key);
+  if (pending) return pending;
+  const load = (async () => {
+    // gallery[1] is always the cover because gallery stores the cover first.
+    const rows = index === 0
+      ? await prisma.$queryRaw<Array<{ value: string }>>(Prisma.sql`
+          SELECT image AS value FROM "Product" WHERE id = ${productId}
+        `)
+      : await prisma.$queryRaw<Array<{ value: string | null }>>(Prisma.sql`
+          SELECT gallery[${index + 1}::int] AS value FROM "Product" WHERE id = ${productId}
+        `);
+    const value = rows[0]?.value ?? null;
+    if (value) cacheProductImage(key, value);
+    return value;
+  })();
+  productImageValueLoads.set(key, load);
+  try {
+    return await load;
+  } finally {
+    productImageValueLoads.delete(key);
+  }
+}
+
+function cacheProductImageValues(productId: string, image: string, gallery: string[], version: number) {
+  cacheProductImage(productImageCacheKey(productId, 0, version), image);
+  gallery.forEach((value, index) => cacheProductImage(productImageCacheKey(productId, index, version), value));
+}
+
+function forgetProductImages(productId: string) {
+  const prefix = `${productId}:`;
+  for (const key of productImageCache.keys()) {
+    if (key.startsWith(prefix)) {
+      productImageCacheBytes -= productImageCache.get(key)?.length ?? 0;
+      productImageCache.delete(key);
+    }
+  }
+}
+
+// Saving changed images needs the stored values so proxy references in the
+// submitted gallery can be resolved. This full read only happens on an actual
+// image edit.
+async function loadProductImageValues(productId: string): Promise<{ image: string; gallery: string[] } | null> {
+  const pending = productImageSnapshotLoads.get(productId);
+  if (pending) return pending;
+  const load = (async () => {
+    const product = await prisma.product.findUnique({
+      where: { id: productId },
+      select: { image: true, gallery: true, updatedAt: true },
+    });
+    if (!product) return null;
+    const version = product.updatedAt.getTime();
+    cacheProductImageValues(productId, product.image, product.gallery, version);
+    return { image: product.image, gallery: product.gallery };
+  })();
+  productImageSnapshotLoads.set(productId, load);
+  try {
+    return await load;
+  } finally {
+    productImageSnapshotLoads.delete(productId);
+  }
+}
+
+function productImageProxyPath(productId: string, index: number, version: number) {
+  // No query string: next/image rejects local sources with search params
+  // unless they are explicitly allow-listed.
+  return `/api/products/${encodeURIComponent(productId)}/image/${index}/${version}`;
+}
+
+function storedImageRef(productId: string, value: string, index: number, version: number) {
+  // Relative and remote references render as-is; only inline data URLs need
+  // the proxy because they are far too large to inline in JSON.
+  return value.startsWith('data:') ? productImageProxyPath(productId, index, version) : value;
+}
+
+function imageRefsFor(productId: string, image: string, gallery: string[], version: number): ProductImageRefs {
+  return {
+    image: storedImageRef(productId, image, 0, version),
+    gallery: gallery.map((value, index) => storedImageRef(productId, value, index, version)),
+    galleryCount: gallery.length,
+  };
+}
+
+// The edit form round-trips the proxy references it downloaded. Resolve only
+// references that point back at the same product so a request cannot copy
+// another product's stored image.
+function submittedImageIndex(productId: string, value: string) {
+  if (!value.startsWith('/api/products/')) return null;
+  let url: URL;
+  try {
+    url = new URL(value, 'http://internal');
+  } catch {
+    return null;
+  }
+  const match = url.pathname.match(/^\/api\/products\/([^/]+)\/image\/(\d+)\/[^/]+$/);
+  const referencedId = match?.[1];
+  if (!referencedId || decodeURIComponent(referencedId) !== productId) return null;
+  const index = Number(match?.[2] ?? '0');
+  return Number.isInteger(index) && index >= 0 ? index : null;
+}
+
+async function submittedProductImages(productId: string, data: Record<string, unknown>): Promise<PreparedProductImages | null> {
+  const hasCover = data.image !== undefined;
+  const hasGallery = data.gallery !== undefined;
+  if (!hasCover && !hasGallery) return null;
+  const existing = hasCover && hasGallery ? null : await loadProductImageValues(productId);
+  if ((!hasCover || !hasGallery) && !existing) {
+    const error = new Error('Product not found') as Error & { status?: number };
+    error.status = 404;
+    throw error;
+  }
+  const needsStoredValues = (hasCover && submittedImageIndex(productId, String(data.image ?? '').trim()) !== null)
+    || (hasGallery && Array.isArray(data.gallery) && data.gallery.some((entry) => submittedImageIndex(productId, String(entry ?? '').trim()) !== null));
+  const stored = needsStoredValues ? await loadProductImageValues(productId) : null;
+  if (needsStoredValues && !stored) {
+    const error = new Error('Product not found') as Error & { status?: number };
+    error.status = 404;
+    throw error;
+  }
+  const resolve = (value: unknown) => {
+    const reference = String(value ?? '').trim();
+    const index = submittedImageIndex(productId, reference);
+    if (index === null) return imageReference(reference);
+    const resolved = index === 0 ? stored!.image : stored!.gallery[index];
+    if (!resolved) throw new Error('That gallery image no longer exists. Reopen the product and try again.');
+    return resolved;
+  };
+  const cover = hasCover ? resolve(data.image) : existing!.image;
+  const gallery = hasGallery && Array.isArray(data.gallery)
+    ? data.gallery.map(resolve)
+    : existing?.gallery;
+  return prepareProductImages(cover, gallery);
 }
 
 async function saveAccountAddress(data: any) {
@@ -2227,8 +2471,6 @@ const adminProductSelect = {
   description: true,
   price: true,
   oldPrice: true,
-  image: true,
-  gallery: true,
   isCustomizable: true,
   label: true,
   category: true,
@@ -2237,6 +2479,19 @@ const adminProductSelect = {
   createdAt: true,
   updatedAt: true,
   categoryLinks: productCategoryInclude.categoryLinks,
+} satisfies Prisma.ProductSelect;
+const adminProductSaveSelect = {
+  id: true,
+  name: true,
+  description: true,
+  price: true,
+  oldPrice: true,
+  isCustomizable: true,
+  label: true,
+  category: true,
+  inventoryCount: true,
+  reviews: true,
+  updatedAt: true,
 } satisfies Prisma.ProductSelect;
 const publicProductCardSelect = {
   id: true,
@@ -2279,6 +2534,83 @@ function productCard(product: {
     category: product.category,
     reviews: Number.isInteger(product.reviews) && (product.reviews || 0) >= 0 ? product.reviews : 0,
   };
+}
+
+type AdminProductFields = {
+  id: string;
+  name: string;
+  description: string;
+  price: number;
+  oldPrice: number | null;
+  isCustomizable: boolean;
+  label: string;
+  category: string;
+  inventoryCount: number;
+  reviews: number;
+  updatedAt: Date;
+  categoryLinks?: Array<{ category: { id: string; name: string; slug: string; coverImage: string } }>;
+};
+
+// `images` is null when the save did not touch them and `categoryIds` is null
+// when the save did not touch the category links; the admin form merges the
+// response into the row it already has, so unchanged fields stay omitted
+// instead of costing another round trip over the slow database link.
+function adminProductSummary(product: AdminProductFields, images: ProductImageRefs | null, categoryIds?: string[] | null) {
+  const categories = product.categoryLinks?.map((link) => link.category) ?? [];
+  const resolvedCategoryIds = categoryIds === null
+    ? undefined
+    : categoryIds ?? categories.map((category) => category.id);
+  return {
+    id: product.id,
+    name: product.name,
+    description: product.description,
+    price: product.price,
+    oldPrice: product.oldPrice,
+    ...(images ? { image: images.image, gallery: images.gallery, galleryCount: images.galleryCount } : {}),
+    isCustomizable: product.isCustomizable,
+    label: product.label,
+    category: product.category,
+    inventoryCount: product.inventoryCount,
+    reviews: product.reviews,
+    updatedAt: product.updatedAt,
+    categories,
+    ...(resolvedCategoryIds !== undefined ? { categoryIds: resolvedCategoryIds } : {}),
+  };
+}
+
+// Build proxy references without transferring the stored image data. Postgres
+// still detoasts the columns to evaluate LIKE and unnest, but only short paths
+// cross the network.
+async function productImageRefsByIds(ids: string[]) {
+  const refs = new Map<string, ProductImageRefs>();
+  if (ids.length === 0) return refs;
+  const rows = await prisma.$queryRaw<Array<{ id: string; image: string; gallery: string[]; galleryCount: number }>>(Prisma.sql`
+    SELECT
+      p.id,
+      CASE WHEN p.image LIKE 'data:%'
+        THEN '/api/products/' || p.id || '/image/0/' || (round(extract(epoch FROM p."updatedAt") * 1000))::bigint::text
+        ELSE p.image
+      END AS image,
+      ARRAY(
+        SELECT CASE WHEN entry.value LIKE 'data:%'
+          THEN '/api/products/' || p.id || '/image/' || (entry.position - 1)::text || '/' || (round(extract(epoch FROM p."updatedAt") * 1000))::bigint::text
+          ELSE entry.value
+        END
+        FROM unnest(p.gallery) WITH ORDINALITY AS entry(value, position)
+        ORDER BY entry.position
+      ) AS gallery,
+      COALESCE(array_length(p.gallery, 1), 0)::int AS "galleryCount"
+    FROM "Product" p
+    WHERE p.id IN (${Prisma.join(ids)})
+  `);
+  for (const row of rows) {
+    refs.set(row.id, {
+      image: row.image,
+      gallery: row.gallery ?? [],
+      galleryCount: Number(row.galleryCount),
+    });
+  }
+  return refs;
 }
 
 function paginationFromQuery(query: Request['query'], defaults: { pageSize: number; maxPageSize: number }) {
@@ -2507,11 +2839,49 @@ app.get('/api/admin/products', requireAdmin, async (req, res) => {
         select: adminProductSelect,
       }),
     ]);
+    const imageRefs = await productImageRefsByIds(products.map((product) => product.id));
     res.setHeader('Cache-Control', 'private, no-store');
-    res.json({ items: products.map(productWithCategoriesAndReviews), pagination: paginationMetadata(page, pageSize, total) });
+    res.json({
+      items: products.map((product) => adminProductSummary(product, imageRefs.get(product.id) ?? EMPTY_PRODUCT_IMAGE_REFS)),
+      pagination: paginationMetadata(page, pageSize, total),
+    });
   } catch (error) {
     console.error('Failed to fetch admin products:', error);
     res.status(400).json({ error: error instanceof Error ? error.message : 'Failed to fetch products.' });
+  }
+});
+
+app.get('/api/products/:id/image/:index/:version', async (req, res) => {
+  try {
+    const productId = routeParam(req.params.id);
+    const requestedIndex = Number(routeParam(req.params.index));
+    const index = Number.isInteger(requestedIndex) && requestedIndex >= 0 && requestedIndex <= 16 ? requestedIndex : 0;
+    const requestedVersion = Number(routeParam(req.params.version));
+    const version = Number.isFinite(requestedVersion) ? requestedVersion : 0;
+    const value = await loadProductImageValue(productId, index, version);
+    if (!value) return res.status(404).end();
+    if (!value.startsWith('data:')) {
+      if (/^https?:\/\//i.test(value)) return res.redirect(302, value);
+      // Relative references such as /images/product_mockup.png belong to the
+      // storefront, not to this API.
+      return res.status(404).end();
+    }
+    const match = value.match(DATA_IMAGE_PATTERN);
+    const [, mimeType, base64] = match ?? [];
+    if (!mimeType || !base64) return res.status(415).end();
+    const bytes = Buffer.from(base64, 'base64');
+    const etag = `"${crypto.createHash('sha1').update(bytes).digest('base64url').slice(0, 20)}"`;
+    res.setHeader('Content-Type', mimeType.toLowerCase() === 'image/jpg' ? 'image/jpeg' : mimeType.toLowerCase());
+    res.setHeader('ETag', etag);
+    // The reference embeds the row's updatedAt, so the URL changes whenever
+    // the image can change and the response is safe to cache forever.
+    res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+    if (req.headers['if-none-match'] === etag) return res.status(304).end();
+    res.setHeader('Content-Length', String(bytes.length));
+    res.end(bytes);
+  } catch (error) {
+    console.error('Failed to serve product image:', error);
+    res.status(503).end();
   }
 });
 
@@ -2551,8 +2921,8 @@ app.post('/api/products', requireAdmin, async (req, res) => {
         description: values.description,
         price: values.price,
         oldPrice: values.oldPrice,
-        image: images!.image,
-        gallery: images!.gallery,
+        image: images.image,
+        gallery: images.gallery,
         isCustomizable: category !== 'no customization',
         label: normalizeProductLabel(data.label || data.category),
         category,
@@ -2560,11 +2930,13 @@ app.post('/api/products', requireAdmin, async (req, res) => {
         reviews,
         ...(categoryIds ? { categoryLinks: { create: categoryIds.map((categoryId) => ({ categoryId })) } } : {}),
       },
-      include: productCategoryInclude,
+      select: adminProductSaveSelect,
     });
+    const version = product.updatedAt.getTime();
+    cacheProductImageValues(product.id, images.image, images.gallery, version);
     io.emit("products_updated");
     io.emit("categories_updated");
-    res.status(201).json(productWithCategoriesAndReviews(product));
+    res.status(201).json(adminProductSummary(product, imageRefsFor(product.id, images.image, images.gallery, version), categoryIds ?? []));
   } catch (error: any) {
     console.error("Failed to create product:", error);
     res.status(error?.status || (error?.code === 'P2002' ? 409 : 400)).json({ error: error?.message || "Failed to create product" });
@@ -2576,12 +2948,16 @@ app.put('/api/products/:id', requireAdmin, async (req, res) => {
     const productId = routeParam(req.params.id);
     const data = req.body || {};
     const values = validateAdminProductInput(data);
-    const existing = await prisma.product.findUnique({ where: { id: productId }, select: { id: true, image: true, gallery: true } });
-    if (!existing) return res.status(404).json({ error: 'Product not found' });
-    const categoryIds = await validatedCategoryIds(data.categoryIds);
+    // Images and category links are the expensive parts of a save. The admin
+    // form omits them when they were not changed, so this path is a single
+    // update statement: no blob reads, no category lookup, no refs query.
+    // An unknown category ID still fails through the foreign key below.
+    const [categoryIds, submittedImages] = await Promise.all([
+      validatedCategoryIds(data.categoryIds, false),
+      submittedProductImages(productId, data),
+    ]);
     const category = normalizeProductCategory(data.category);
     const reviews = normalizeProductReviewCount(data.reviews);
-    const images = prepareProductImages(data.image || existing.image, data.gallery === undefined ? existing.gallery : data.gallery);
     const product = await prisma.product.update({
       where: { id: productId },
       data: {
@@ -2589,8 +2965,7 @@ app.put('/api/products/:id', requireAdmin, async (req, res) => {
         description: values.description,
         price: values.price,
         oldPrice: values.oldPrice,
-        image: images!.image,
-        gallery: images!.gallery,
+        ...(submittedImages ? { image: submittedImages.image, gallery: submittedImages.gallery } : {}),
         isCustomizable: category !== 'no customization',
         label: normalizeProductLabel(data.label || data.category),
         category,
@@ -2598,23 +2973,33 @@ app.put('/api/products/:id', requireAdmin, async (req, res) => {
         reviews,
         ...(categoryIds !== undefined ? { categoryLinks: { deleteMany: {}, create: categoryIds.map((categoryId) => ({ categoryId })) } } : {}),
       },
-      include: productCategoryInclude,
+      select: adminProductSaveSelect,
     });
+    const version = product.updatedAt.getTime();
+    const imageRefs = submittedImages
+      ? imageRefsFor(productId, submittedImages.image, submittedImages.gallery, version)
+      : null;
+    if (submittedImages) cacheProductImageValues(productId, submittedImages.image, submittedImages.gallery, version);
     io.emit("products_updated");
     io.emit("categories_updated");
-    res.json(productWithCategoriesAndReviews(product));
+    res.json(adminProductSummary(product, imageRefs, categoryIds ?? null));
   } catch (error: any) {
     console.error("Failed to update product:", error);
-    res.status(error?.status || (error?.code === 'P2002' ? 409 : 400)).json({ error: error?.message || "Failed to update product" });
+    const status = error?.status || (error?.code === 'P2025' ? 404 : error?.code === 'P2002' ? 409 : 400);
+    const message = error?.code === 'P2003'
+      ? 'One or more selected categories no longer exist.'
+      : error?.message || "Failed to update product";
+    res.status(status).json({ error: message });
   }
 });
 
 app.delete('/api/products/:id', requireAdmin, async (req, res) => {
   try {
     const productId = routeParam(req.params.id);
-    const existing = await prisma.product.findUnique({ where: { id: productId }, select: { image: true, gallery: true } });
+    const existing = await prisma.product.findUnique({ where: { id: productId }, select: { id: true } });
     if (!existing) return res.status(404).json({ error: 'Product not found' });
     await prisma.product.delete({ where: { id: productId } });
+    forgetProductImages(productId);
     io.emit("products_updated");
     io.emit("categories_updated");
     res.json({ success: true, id: productId });
@@ -2822,6 +3207,7 @@ async function shutdown(signal: string) {
   clearInterval(rateLimitCleanupInterval);
   clearInterval(checkoutCleanupInterval);
   clearInterval(reconcileInterval);
+  clearInterval(dbKeepAliveInterval);
   io.close();
   httpServer.close(async () => {
     try {

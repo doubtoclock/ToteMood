@@ -20,6 +20,7 @@ import {
 import Image from "next/image";
 import { io } from "socket.io-client";
 import { apiFetch, ENABLE_REALTIME, SOCKET_URL } from "@/lib/api";
+import { useBodyScrollLock } from "@/lib/useBodyScrollLock";
 
 interface OrderItem {
   id: string;
@@ -222,6 +223,8 @@ export default function AdminOrdersPage() {
   const [editingDisplayId, setEditingDisplayId] = useState<string | null>(null);
   const [displayIdInput, setDisplayIdInput] = useState("");
   const [displayIdError, setDisplayIdError] = useState("");
+
+  useBodyScrollLock(selectedOrder !== null);
 
   const fetchOrders = useCallback(() => {
     apiFetch<OrderListResponse>(`/api/orders?page=${page}&pageSize=25`)
@@ -470,7 +473,7 @@ export default function AdminOrdersPage() {
 
       {selectedOrder && (
         <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl w-full max-w-4xl max-h-[90vh] overflow-y-auto shadow-2xl flex flex-col md:flex-row">
+          <div className="bg-white rounded-2xl w-full max-w-4xl max-h-[90vh] overflow-y-auto overscroll-contain shadow-2xl flex flex-col md:flex-row">
             <div className="flex-1 p-8 border-r border-[#1C1C1A]/10">
               <div className="flex justify-between items-start mb-8">
                 <div>

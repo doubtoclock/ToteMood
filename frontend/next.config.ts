@@ -1,8 +1,8 @@
 import type { NextConfig } from "next";
 
-const apiOrigin = process.env.NEXT_PUBLIC_API_URL
-  ? new URL(process.env.NEXT_PUBLIC_API_URL).origin
-  : "http://localhost:4010";
+const apiBaseUrl =
+  process.env.NEXT_PUBLIC_API_URL?.replace(/\/$/, "") || "http://localhost:4010";
+const apiOrigin = new URL(apiBaseUrl).origin;
 
 // `upgrade-insecure-requests` would force phone browsers on a plain-HTTP LAN
 // dev address to fetch CSS/JS over HTTPS, where the dev server has no TLS.
@@ -36,6 +36,12 @@ const nextConfig: NextConfig = {
         hostname: "**.supabase.co",
       },
     ],
+  },
+  async rewrites() {
+    // Product images are served by the API as /api/products/:id/image. Routing
+    // that path through this origin keeps next/image optimization and CSP on
+    // the same host instead of duplicating the API in every image URL.
+    return [{ source: "/api/:path*", destination: `${apiBaseUrl}/api/:path*` }];
   },
   async headers() {
     return [
