@@ -72,7 +72,7 @@ export default function ProductPage() {
         <ProductFeatures />
 
         {/* 3. Customer Reviews */}
-        <ProductReviews />
+        <ProductReviews reviewCount={product.reviews} />
 
         {/* 4. Frequently Asked Questions */}
         <ProductFAQ />

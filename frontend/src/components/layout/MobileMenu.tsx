@@ -112,15 +112,16 @@ export function MobileMenu({ isOpen, onClose }: MobileMenuProps) {
                       {collectionsOpen && (
                         <div className="mt-3 space-y-1 border-l border-border pl-4">
                           {categoriesLoading ? (
-                            <p className="py-2 font-heading text-4xl md:text-5xl font-medium tracking-tight text-secondary-foreground">Loading…</p>
+                            <p className="py-1.5 text-sm text-secondary-foreground">Loading…</p>
                           ) : categories.length === 0 ? (
-                            <p className="py-2 font-heading text-4xl md:text-5xl font-medium tracking-tight text-secondary-foreground">Coming soon</p>
+                            <p className="py-1.5 text-sm text-secondary-foreground">Coming soon</p>
                           ) : categories.map((category) => (
                             <Link
                               key={category.id}
                               href={`/categories/${category.slug}`}
                               onClick={onClose}
-                              className="block py-2 font-heading text-4xl md:text-5xl font-medium tracking-tight text-foreground hover:opacity-70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                              title={category.name}
+                              className="block py-1.5 text-sm md:text-base font-medium text-foreground/80 hover:text-foreground transition-colors truncate whitespace-nowrap focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                             >
                               {category.name}
                             </Link>

@@ -2,7 +2,7 @@ import Image from "next/image";
 import { Star } from "lucide-react";
 import { motion } from "framer-motion";
 
-export function ProductReviews() {
+export function ProductReviews({ reviewCount }: { reviewCount?: number } = {}) {
   // Use all 27 reviews for every product
   const reviewImages = Array.from({ length: 27 }).map((_, i) => `/review/${i + 1}.png`);
 
@@ -40,7 +40,7 @@ export function ProductReviews() {
                 ))}
               </div>
               <span className="text-[14px] font-bold text-[#252A1A]">4.9 / 5</span>
-              <span className="text-[14px] text-[#8C867C]">(128 reviews)</span>
+              <span className="text-[14px] text-[#8C867C]">({reviewCount !== undefined && reviewCount >= 0 ? reviewCount : 128} reviews)</span>
             </div>
           </div>
         </div>

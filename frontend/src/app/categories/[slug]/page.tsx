@@ -31,7 +31,7 @@ export default function CategoryPage() {
     let active = true;
     void Promise.resolve().then(() => {
       if (active) setState("loading");
-      return apiFetch<CategoryDetail>(`/api/categories/${encodeURIComponent(slug)}?page=${page}&pageSize=6`);
+      return apiFetch<CategoryDetail>(`/api/categories/${encodeURIComponent(slug)}?page=${page}&pageSize=10`);
     })
       .then((result) => {
         if (!active) return;

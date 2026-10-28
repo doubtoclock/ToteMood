@@ -2247,8 +2247,9 @@ const publicProductCardSelect = {
   isCustomizable: true,
   label: true,
   category: true,
+  reviews: true,
 } satisfies Prisma.ProductSelect;
-const PRODUCT_PAGE_SIZE = 6;
+const PRODUCT_PAGE_SIZE = 10;
 const MAX_PRODUCT_PAGE_SIZE = 48;
 const MAX_PAGE_NUMBER = 10_000;
 const ORDER_PAGE_SIZE = 25;
@@ -2522,6 +2523,7 @@ app.get('/api/products/:id', async (req, res) => {
       select: {
         id: true, name: true, description: true, price: true, oldPrice: true,
         image: true, gallery: true, isCustomizable: true, label: true, category: true,
+        reviews: true,
         categoryLinks: productCategoryInclude.categoryLinks,
       },
     });

@@ -1,9 +1,12 @@
 node_modules/
 dist/
-.env.env
+# Local environment configuration and credentials must never be committed.
+.env
 .env.*
+!.env.example
 backend/.env
 frontend/.env
+frontend/.env.local
 .DS_Store
 frontend/frontend/
 # playwright artifacts
