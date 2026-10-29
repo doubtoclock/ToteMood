@@ -160,7 +160,7 @@ export default function AdminLayout({
       </aside>
 
       {/* Main Content */}
-      <main data-admin-scroll className="flex-1 min-w-0 h-full overflow-y-auto overscroll-contain">
+      <main data-admin-scroll tabIndex={-1} className="flex-1 min-w-0 h-full overflow-y-auto overscroll-contain outline-none">
         <div className="p-8 max-w-7xl mx-auto">
           {children}
         </div>

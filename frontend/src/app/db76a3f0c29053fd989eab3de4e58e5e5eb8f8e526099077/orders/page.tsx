@@ -259,6 +259,10 @@ export default function AdminOrdersPage() {
     };
   }, [fetchOrders]);
 
+  useEffect(() => {
+    if (pagination && page > pagination.totalPages) setPage(pagination.totalPages);
+  }, [pagination, page]);
+
   const handleDelete = async (id: string) => {
     if (!confirm("Are you sure you want to delete this order?")) return;
     setDeletingId(id);

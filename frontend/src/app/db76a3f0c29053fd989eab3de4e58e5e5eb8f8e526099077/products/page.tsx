@@ -124,6 +124,10 @@ export default function AdminProducts() {
     };
   }, [fetchProducts]);
 
+  useEffect(() => {
+    if (pagination && page > pagination.totalPages) setPage(pagination.totalPages);
+  }, [pagination, page]);
+
   const processCoverFile = async (file: File) => {
     try {
       const result = await compressImageForUpload(file);
@@ -257,7 +261,10 @@ export default function AdminProducts() {
       await apiFetch(`/api/products/${id}`, {
         method: 'DELETE'
       });
-      setProducts((current) => current.filter((product) => product.id !== id));
+      const remaining = products.filter((product) => product.id !== id);
+      setProducts(remaining);
+      // Deleting the only row on a later page would leave the table empty.
+      if (remaining.length === 0 && page > 1) setPage(page - 1);
     } catch (err) {
       console.error(err);
       alert("Cannot delete product: it may be tied to existing orders.");

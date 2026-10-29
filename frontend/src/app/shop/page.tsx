@@ -3,7 +3,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { ShoppingCart, Star, Truck } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { ShopHeader } from "@/components/shop/ShopHeader";
 import { ShopCategories } from "@/components/shop/ShopCategories";
 import { ShopSkeleton } from "@/components/shop/ShopSkeleton";
@@ -17,6 +17,20 @@ export default function ShopPage() {
   const [page, setPage] = useState(1);
   const { products, loading, error, pagination, refetch } = useProducts({ page, pageSize: 10 });
   const addItem = useCartStore((state) => state.addItem);
+
+  // Deleting or filtering products can leave the visitor on a page that no
+  // longer exists; fall back to the last real page instead of an empty grid.
+  useEffect(() => {
+    if (pagination && page > pagination.totalPages) setPage(pagination.totalPages);
+  }, [pagination, page]);
+
+  const goToPage = (next: number) => {
+    setPage(next);
+    const target = document.getElementById("all-products");
+    if (!target) return;
+    const top = target.getBoundingClientRect().top + window.scrollY - 88;
+    window.scrollTo({ top: Math.max(0, top), behavior: "smooth" });
+  };
 
   return (
     <main className="min-h-screen bg-[#FAF9F8]">
@@ -45,7 +59,7 @@ export default function ShopPage() {
       {/* 2. Product Discovery */}
       <section id="all-products" className="pt-0 pb-16 md:pt-2 md:pb-24 bg-[#FAF9F8]">
         <div className="container mx-auto px-4 sm:px-6 lg:px-12">
-          {loading ? (
+          {loading && products.length === 0 ? (
             <ShopSkeleton />
           ) : error && products.length === 0 ? (
             <div className="rounded-[24px] border border-[#E8E5DC] bg-white px-6 py-16 text-center">
@@ -135,9 +149,9 @@ export default function ShopPage() {
             </div>
             {pagination && pagination.totalPages > 1 && (
               <nav aria-label="Product pages" className="mt-12 flex flex-wrap items-center justify-center gap-3">
-                <button type="button" disabled={!pagination.hasPreviousPage} onClick={() => setPage((current) => Math.max(1, current - 1))} className="rounded-full border border-[#1C1C1A]/20 px-5 py-2.5 text-sm font-bold text-[#252A1A] disabled:cursor-not-allowed disabled:opacity-40">Previous</button>
+                <button type="button" disabled={!pagination.hasPreviousPage} onClick={() => goToPage(Math.max(1, pagination.page - 1))} className="rounded-full border border-[#1C1C1A]/20 px-5 py-2.5 text-sm font-bold text-[#252A1A] disabled:cursor-not-allowed disabled:opacity-40">Previous</button>
                 <span className="text-sm text-[#5A5A55]">Page {pagination.page} of {pagination.totalPages}</span>
-                <button type="button" disabled={!pagination.hasNextPage} onClick={() => setPage((current) => current + 1)} className="rounded-full bg-[#252A1A] px-5 py-2.5 text-sm font-bold text-white disabled:cursor-not-allowed disabled:opacity-40">Next</button>
+                <button type="button" disabled={!pagination.hasNextPage} onClick={() => goToPage(pagination.page + 1)} className="rounded-full bg-[#252A1A] px-5 py-2.5 text-sm font-bold text-white disabled:cursor-not-allowed disabled:opacity-40">Next</button>
               </nav>
             )}
             </>
